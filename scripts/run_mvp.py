@@ -14,8 +14,18 @@ from quantpilot.strategy.sma_cross import SMACrossStrategy
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="QuantPilot MVP demo")
     parser.add_argument("--symbol", default="005930.KS", help="Ticker symbol")
-    parser.add_argument("--start", default="2023-01-01", help="Start date YYYY-MM-DD")
-    parser.add_argument("--end", default="2025-12-31", help="End date YYYY-MM-DD")
+    parser.add_argument(
+        "--start",
+        type=date.fromisoformat,
+        default=date.fromisoformat("2023-01-01"),
+        help="Start date YYYY-MM-DD",
+    )
+    parser.add_argument(
+        "--end",
+        type=date.fromisoformat,
+        default=date.fromisoformat("2025-12-31"),
+        help="End date YYYY-MM-DD",
+    )
     parser.add_argument(
         "--skip-ai",
         action="store_true",
@@ -26,14 +36,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    start = date.fromisoformat(args.start)
-    end = date.fromisoformat(args.end)
 
-    print(f"QuantPilot MVP — {args.symbol} ({start} ~ {end})")
+    print(f"QuantPilot MVP — {args.symbol} ({args.start} ~ {args.end})")
     print("=" * 60)
 
     manager = create_datasource_manager()
-    prices = manager.get_price(args.symbol, start, end)
+    prices = manager.get_price(args.symbol, args.start, args.end)
     print(f"Loaded {prices.height} rows from Q-SEED")
 
     strategy = SMACrossStrategy(fast_window=20, slow_window=60)

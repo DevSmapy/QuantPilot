@@ -1,8 +1,12 @@
 """Application configuration loaded from environment variables."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_settings: Settings | None = None
 
 
 class Settings(BaseSettings):
@@ -36,5 +40,14 @@ class Settings(BaseSettings):
 
 
 def get_settings() -> Settings:
-    """Return cached settings instance."""
-    return Settings()
+    """Return a cached Settings instance."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+
+def reset_settings() -> None:
+    """Clear the cached Settings instance. Intended for tests."""
+    global _settings
+    _settings = None

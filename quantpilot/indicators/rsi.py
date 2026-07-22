@@ -17,6 +17,14 @@ def rsi(series: pl.Series, window: int = 14) -> pl.Series:
 
     avg_gain = gain.rolling_mean(window_size=window)
     avg_loss = loss.rolling_mean(window_size=window)
-
     rs = avg_gain / avg_loss
-    return (100.0 - (100.0 / (1.0 + rs))).fill_nan(100.0)
+
+    return pl.DataFrame({"avg_gain": avg_gain, "avg_loss": avg_loss, "rs": rs}).select(
+        pl.when((pl.col("avg_loss") == 0) & (pl.col("avg_gain") == 0))
+        .then(50.0)
+        .when(pl.col("avg_loss") == 0)
+        .then(100.0)
+        .otherwise(100.0 - (100.0 / (1.0 + pl.col("rs"))))
+        .fill_nan(50.0)
+        .alias("rsi")
+    )["rsi"]
