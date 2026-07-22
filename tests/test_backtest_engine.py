@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import polars as pl
+import pytest
 
 from quantpilot.backtest.engine import BacktestEngine
 from quantpilot.indicators.rsi import rsi
 from quantpilot.indicators.sma import sma
+from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
 from quantpilot.strategy.sma_cross import SMACrossStrategy
 
 
@@ -20,11 +24,46 @@ def test_rsi_indicator(sample_prices: pl.DataFrame) -> None:
     assert values.len() == sample_prices.height
 
 
+def test_rsi_flat_price_returns_neutral_value() -> None:
+    flat_prices = pl.Series("close", [100.0] * 20)
+    values = rsi(flat_prices, 14)
+    assert values.drop_nulls()[-1] == 50.0
+
+
 def test_sma_cross_strategy_generates_signals(sample_prices: pl.DataFrame) -> None:
     strategy = SMACrossStrategy(fast_window=5, slow_window=20)
     signals = strategy.run(sample_prices)
     assert "signal" in signals.columns
     assert signals["signal"].is_in([-1, 0, 1]).all()
+
+
+def test_backtest_engine_deterministic_metrics() -> None:
+    prices = pl.DataFrame(
+        {
+            QP_DATE: [
+                date(2024, 1, 1),
+                date(2024, 1, 2),
+                date(2024, 1, 3),
+                date(2024, 1, 4),
+                date(2024, 1, 5),
+            ],
+            QP_CLOSE: [100.0, 102.0, 101.0, 103.0, 105.0],
+        }
+    )
+    signals = pl.DataFrame(
+        {
+            QP_DATE: prices[QP_DATE],
+            "signal": [0, 1, 0, 0, -1],
+        }
+    )
+
+    result = BacktestEngine().run(prices, signals)
+
+    assert result.trades_count == 1
+    assert result.total_return == pytest.approx(0.02941176470588225)
+    assert result.mdd == pytest.approx(-0.009803921568627416)
+    assert result.sharpe == pytest.approx(9.165151389911701)
+    assert result.cagr > 0.0
 
 
 def test_backtest_engine_returns_metrics(sample_prices: pl.DataFrame) -> None:

@@ -43,18 +43,17 @@ class BacktestEngine:
         trades_count = 0
 
         for idx in range(1, len(closes)):
-            daily_return = 0.0
-            if position == 1 and closes[idx - 1] != 0:
-                daily_return = (closes[idx] / closes[idx - 1]) - 1.0
-                equity *= 1.0 + daily_return
-
-            sig = signal_values[idx]
+            # Execute prior-bar signals to avoid same-bar look-ahead.
+            sig = signal_values[idx - 1]
             if sig == 1 and position == 0:
                 position = 1
                 trades_count += 1
             elif sig == -1 and position == 1:
                 position = 0
                 trades_count += 1
+
+            if position == 1 and closes[idx - 1] != 0:
+                equity *= closes[idx] / closes[idx - 1]
 
             equity_curve.append(equity)
 
