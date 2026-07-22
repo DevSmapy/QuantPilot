@@ -1,12 +1,12 @@
 services:
-  # Optional: use only if you don't have an existing Ollama container.
-  # Start with: docker compose --profile bundled-ollama up -d ollama
+  # Bundled Ollama for the default `make up` flow.
+  # External Ollama users can skip this profile and run `make ollama-network`.
   ollama:
     profiles: ["bundled-ollama"]
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.6.5
     container_name: quantpilot-ollama
     ports:
-      - "${OLLAMA_HOST_PORT:-11434}:11434"
+      - "127.0.0.1:${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
       - ollama_models:/root/.ollama
     restart: unless-stopped
@@ -24,7 +24,7 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
       DOCKER: "1"
     volumes:
-      - ${QSEED_HOST_PATH:-/Volumes/WD_BLACK/Careers/PythonProjects/Q-SEED/data}:/data/qseed:ro
+      - ${QSEED_HOST_PATH:?Set QSEED_HOST_PATH in .env}:/data/qseed:ro
       - ./storage:/app/storage
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -44,7 +44,8 @@ services:
       DOCKER: "1"
     volumes:
       - .:/app
-      - ${QSEED_HOST_PATH:-/Volumes/WD_BLACK/Careers/PythonProjects/Q-SEED/data}:/data/qseed:ro
+      - /app/.venv
+      - ${QSEED_HOST_PATH:?Set QSEED_HOST_PATH in .env}:/data/qseed:ro
       - ./storage:/app/storage
     extra_hosts:
       - "host.docker.internal:host-gateway"
