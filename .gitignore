@@ -43,6 +43,7 @@ htmlcov/
 .env
 .env.*
 !.env.example
+.cursor/
 
 # Data & storage (local)
 storage/
