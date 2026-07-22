@@ -52,8 +52,50 @@ def test_qseed_provider_unknown_symbol(tmp_path: Path) -> None:
     data_path, metadata = _setup_qseed_tree(tmp_path)
     provider = QSeedProvider(data_path, metadata, cache_path=tmp_path / "cache")
 
+    assert not provider.has_symbol("UNKNOWN.KS")
     with pytest.raises(SymbolNotFoundError):
         provider.get_price("UNKNOWN.KS", date(2023, 1, 1), date(2023, 1, 31))
+
+
+def test_qseed_provider_metadata_without_shard_is_not_available(
+    tmp_path: Path, sample_parquet_path: Path
+) -> None:
+    data_path, metadata = _setup_qseed_tree(tmp_path)
+    (data_path / "data_log" / "krx_list.csv").write_text(
+        "Ticker,Market\nTEST.KS,KOSPI\nMISSING.KS,KOSPI\n",
+        encoding="utf-8",
+    )
+    target = data_path / "stocks_0001.parquet"
+    target.write_bytes(sample_parquet_path.read_bytes())
+
+    provider = QSeedProvider(data_path, metadata, cache_path=tmp_path / "cache")
+    assert provider.has_symbol("TEST.KS")
+    assert not provider.has_symbol("MISSING.KS")
+
+
+def test_qseed_provider_rebuilds_cache_when_dataset_changes(
+    tmp_path: Path, sample_parquet_path: Path
+) -> None:
+    import json
+
+    data_path, metadata = _setup_qseed_tree(tmp_path)
+    cache_path = tmp_path / "cache"
+    target = data_path / "stocks_0001.parquet"
+    target.write_bytes(sample_parquet_path.read_bytes())
+
+    provider = QSeedProvider(data_path, metadata, cache_path=cache_path)
+    provider._get_shard_index()
+    cache_file = cache_path / "shard_index.json"
+    payload = json.loads(cache_file.read_text(encoding="utf-8"))
+    first_fingerprint = payload["fingerprint"]
+
+    (data_path / "stocks_0002.parquet").write_bytes(sample_parquet_path.read_bytes())
+    provider._shard_index = None
+    provider._get_shard_index()
+    second_payload = json.loads(cache_file.read_text(encoding="utf-8"))
+    second_fingerprint = second_payload["fingerprint"]
+
+    assert second_fingerprint != first_fingerprint
 
 
 def test_qseed_provider_empty_range(tmp_path: Path, sample_parquet_path: Path) -> None:

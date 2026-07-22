@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import tempfile
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import duckdb
 import polars as pl
@@ -19,6 +23,9 @@ from quantpilot.providers.qseed_schema import (
     QSEED_DATE,
     QSEED_TICKER,
 )
+from quantpilot.providers.sql_utils import sql_string_literal
+
+_CACHE_FILENAME = "shard_index.json"
 
 
 class QSeedProvider(BaseProvider):
@@ -36,10 +43,15 @@ class QSeedProvider(BaseProvider):
         self._shard_index: dict[str, int] | None = None
 
     def has_symbol(self, symbol: str) -> bool:
-        return self._metadata.has_symbol(symbol)
+        if not self._metadata.has_symbol(symbol):
+            return False
+        return symbol in self._get_shard_index()
 
     def list_symbols(self) -> list[str]:
-        return self._metadata.list_symbols()
+        index = self._get_shard_index()
+        return sorted(
+            symbol for symbol in self._metadata.list_symbols() if symbol in index
+        )
 
     def get_last_date(self) -> date | None:
         return self._metadata.get_last_date()
@@ -53,9 +65,10 @@ class QSeedProvider(BaseProvider):
 
         conn = duckdb.connect()
         try:
+            path_literal = sql_string_literal(parquet_path)
             query = f"""
                 SELECT Date, Ticker, Open, High, Low, Close, Volume, Market
-                FROM read_parquet('{parquet_path}')
+                FROM read_parquet({path_literal})
                 WHERE {QSEED_TICKER} = ?
                   AND CAST({QSEED_DATE} AS DATE) >= ?
                   AND CAST({QSEED_DATE} AS DATE) <= ?
@@ -80,38 +93,89 @@ class QSeedProvider(BaseProvider):
     def _resolve_shard(self, symbol: str) -> int:
         index = self._get_shard_index()
         if symbol not in index:
-            raise DataNotAvailableError(symbol, "?", "?")
+            raise SymbolNotFoundError(symbol)
         return index[symbol]
 
-    def _get_shard_index(self) -> dict[str, int]:
-        if self._shard_index is not None:
-            return self._shard_index
+    def _parquet_shard_paths(self) -> list[Path]:
+        return sorted(
+            path
+            for path in self._data_path.glob("stocks_*.parquet")
+            if not path.name.startswith("._")
+        )
 
-        cache_file = self._cache_path / "shard_index.json"
-        if cache_file.exists():
-            self._shard_index = {
-                k: int(v) for k, v in json.loads(cache_file.read_text()).items()
-            }
-            return self._shard_index
+    def _dataset_fingerprint(self) -> str:
+        parts: list[str] = []
+        for parquet_path in self._parquet_shard_paths():
+            stat = parquet_path.stat()
+            parts.append(f"{parquet_path.name}:{stat.st_mtime_ns}:{stat.st_size}")
+        digest = hashlib.sha256("\n".join(parts).encode()).hexdigest()
+        return digest
 
+    def _load_cache(self, cache_file: Path) -> dict[str, int] | None:
+        if not cache_file.exists():
+            return None
+
+        try:
+            payload: dict[str, Any] = json.loads(cache_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+
+        if payload.get("fingerprint") != self._dataset_fingerprint():
+            return None
+
+        index = payload.get("index")
+        if not isinstance(index, dict):
+            return None
+
+        return {str(symbol): int(shard) for symbol, shard in index.items()}
+
+    def _write_cache(self, cache_file: Path, index: dict[str, int]) -> None:
+        payload = {
+            "fingerprint": self._dataset_fingerprint(),
+            "index": index,
+        }
+        self._cache_path.mkdir(parents=True, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(
+            dir=self._cache_path,
+            prefix="shard_index.",
+            suffix=".tmp",
+        )
+        os.close(fd)
+        temp_file = Path(temp_path)
+        try:
+            temp_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            os.replace(temp_file, cache_file)
+        finally:
+            if temp_file.exists():
+                temp_file.unlink()
+
+    def _build_shard_index(self) -> dict[str, int]:
         index: dict[str, int] = {}
         conn = duckdb.connect()
         try:
-            for parquet_path in sorted(self._data_path.glob("stocks_*.parquet")):
-                if parquet_path.name.startswith("._"):
-                    continue
-                shard_str = parquet_path.stem.split("_")[-1]
-                shard = int(shard_str)
+            for parquet_path in self._parquet_shard_paths():
+                shard = int(parquet_path.stem.split("_")[-1])
+                path_literal = sql_string_literal(parquet_path)
                 rows = conn.execute(
-                    f"SELECT DISTINCT {QSEED_TICKER} "
-                    f"FROM read_parquet('{parquet_path}')"
+                    f"SELECT DISTINCT {QSEED_TICKER} FROM read_parquet({path_literal})"
                 ).fetchall()
                 for (ticker,) in rows:
                     index[ticker] = shard
         finally:
             conn.close()
+        return index
 
-        self._cache_path.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    def _get_shard_index(self) -> dict[str, int]:
+        if self._shard_index is not None:
+            return self._shard_index
+
+        cache_file = self._cache_path / _CACHE_FILENAME
+        cached = self._load_cache(cache_file)
+        if cached is not None:
+            self._shard_index = cached
+            return cached
+
+        index = self._build_shard_index()
+        self._write_cache(cache_file, index)
         self._shard_index = index
         return index
