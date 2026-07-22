@@ -46,12 +46,14 @@ htmlcov/
 
 # Data & storage (local)
 storage/
+!tests/fixtures/
 *.parquet
+!tests/fixtures/*.parquet
 *.duckdb
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
+# Docker
+.docker/

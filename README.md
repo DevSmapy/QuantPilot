@@ -75,6 +75,7 @@ QuantPilot은 다양한 금융 데이터 소스를 하나의 인터페이스로 
 | 영역 | 기술 |
 |------|------|
 | Language | Python 3.12 |
+| Package Manager | uv |
 | API | FastAPI |
 | Database | DuckDB, PostgreSQL |
 | Data | Polars, Pandas |
@@ -140,6 +141,79 @@ feature/*     ← 기능 단위 개발
 - 새 데이터 소스는 `BaseProvider`를 상속하여 구현합니다.
 - 모든 기능에 단위 테스트를 작성합니다.
 - `ruff`, `black`, `mypy`를 통과해야 병합할 수 있습니다.
+
+---
+
+## MVP Quick Start (`feat/build-mvp`)
+
+Vertical slice: Q-SEED data → SMA strategy → backtest → Ollama review.
+
+모든 실행 환경은 **Docker + uv** 기준입니다. Ollama는 Docker 컨테이너에서 실행됩니다.
+
+### 1. 환경 설정
+
+```bash
+cp .env.example .env
+# QSEED_HOST_PATH를 본인 Q-SEED data 디렉터리 절대 경로로 설정 (필수)
+# 기본 Ollama URL: http://ollama:11434 (`make up` bundled flow)
+```
+
+### 2. Docker로 실행 (권장)
+
+```bash
+# bundled Ollama + 개발 컨테이너 기동
+make up
+
+# 기존 ollama 컨테이너를 쓰는 경우
+make up-external
+make ollama-network
+
+# MVP 데모 (AI 제외)
+make demo
+
+# MVP 데모 (Ollama 전략 리뷰 포함)
+make demo-ai
+```
+
+Makefile 단축 명령:
+
+```bash
+make up            # bundled ollama + dev container
+make up-external   # dev container only
+make ollama-network
+make demo          # MVP without AI
+make demo-ai       # MVP with Ollama review
+make shell         # dev container shell
+```
+
+기존 Ollama를 호스트 포트로 노출 중이면 `.env`에서 `OLLAMA_BASE_URL=http://host.docker.internal:11434`로 변경할 수 있습니다.
+
+### 3. 로컬 개발 (uv)
+
+Docker 없이 호스트에서 개발할 때:
+
+```bash
+uv sync
+cp .env.example .env
+# 로컬에서는 OLLAMA_BASE_URL=http://localhost:11434 로 변경
+```
+
+```bash
+# 테스트 & 린트
+uv run pytest -m "not integration"
+uv run ruff check .
+uv run black --check .
+uv run mypy quantpilot
+
+# 로컬 MVP 실행 (Q-SEED 경로를 호스트 경로로 설정)
+uv run python scripts/run_mvp.py --symbol 005930.KS --skip-ai
+```
+
+Integration tests (Q-SEED 드라이브 마운트 필요):
+
+```bash
+uv run pytest -m integration
+```
 
 ---
 
