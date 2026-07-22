@@ -36,6 +36,17 @@ class OllamaConnectionError(QuantPilotError):
         )
 
 
+class OllamaResponseError(QuantPilotError):
+    """Raised when Ollama returns an empty or unusable response."""
+
+    def __init__(self, base_url: str, model: str) -> None:
+        self.base_url = base_url
+        self.model = model
+        super().__init__(
+            f"Ollama returned an empty response for model '{model}' at {base_url}."
+        )
+
+
 class OllamaModelNotFoundError(QuantPilotError):
     """Raised when the requested model is not available in Ollama."""
 

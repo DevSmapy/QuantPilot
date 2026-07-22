@@ -1,15 +1,21 @@
-"""Ollama LLM provider for strategy review."""
+"""Ollama LLM provider for strategy review and generation."""
 
 from __future__ import annotations
+
+from typing import Any
 
 import httpx
 
 from quantpilot.ai.base_llm import BaseLLMProvider
-from quantpilot.exceptions import OllamaConnectionError, OllamaModelNotFoundError
+from quantpilot.exceptions import (
+    OllamaConnectionError,
+    OllamaModelNotFoundError,
+    OllamaResponseError,
+)
 
 
 class OllamaProvider(BaseLLMProvider):
-    """Generate strategy reviews using a local Ollama model."""
+    """Generate text using a local Ollama model."""
 
     def __init__(
         self,
@@ -21,19 +27,23 @@ class OllamaProvider(BaseLLMProvider):
         self.model = model
         self.timeout = timeout
 
-    def review_strategy(
+    def generate(
         self,
-        strategy_name: str,
-        metrics: dict[str, float | int | str],
-        summary: str,
+        prompt: str,
+        *,
+        format_json: bool = False,
+        options: dict[str, Any] | None = None,
     ) -> str:
-        """Request a concise strategy review from Ollama."""
-        prompt = _build_prompt(strategy_name, metrics, summary)
-        payload = {
+        """Request a completion from Ollama."""
+        payload: dict[str, object] = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
         }
+        if format_json:
+            payload["format"] = "json"
+        if options:
+            payload["options"] = options
 
         try:
             with httpx.Client(timeout=self.timeout) as client:
@@ -44,7 +54,7 @@ class OllamaProvider(BaseLLMProvider):
                 if response.status_code == 404:
                     raise OllamaModelNotFoundError(self.model, self.base_url)
                 response.raise_for_status()
-        except (OllamaModelNotFoundError, OllamaConnectionError):
+        except (OllamaModelNotFoundError, OllamaConnectionError, OllamaResponseError):
             raise
         except httpx.ConnectError as exc:
             raise OllamaConnectionError(self.base_url) from exc
@@ -52,10 +62,19 @@ class OllamaProvider(BaseLLMProvider):
             raise OllamaConnectionError(self.base_url) from exc
 
         data = response.json()
-        review = str(data.get("response", "")).strip()
-        if not review:
-            raise OllamaConnectionError(self.base_url)
-        return review
+        text = str(data.get("response", "")).strip()
+        if not text:
+            raise OllamaResponseError(self.base_url, self.model)
+        return text
+
+    def review_strategy(
+        self,
+        strategy_name: str,
+        metrics: dict[str, float | int | str],
+        summary: str,
+    ) -> str:
+        """Request a concise strategy review from Ollama."""
+        return self.generate(_build_prompt(strategy_name, metrics, summary))
 
 
 def _build_prompt(
