@@ -154,36 +154,39 @@ Vertical slice: Q-SEED data → SMA strategy → backtest → Ollama review.
 
 ```bash
 cp .env.example .env
-# QSEED_HOST_PATH: 호스트의 Q-SEED 데이터 경로 (Docker volume mount용)
-# OLLAMA_BASE_URL: 컨테이너 내부에서는 http://ollama:11434 (기본값)
+# QSEED_HOST_PATH를 본인 Q-SEED data 디렉터리 절대 경로로 설정 (필수)
+# 기본 Ollama URL: http://ollama:11434 (`make up` bundled flow)
 ```
 
 ### 2. Docker로 실행 (권장)
 
 ```bash
-# Ollama + 개발 컨테이너 기동
-docker compose --profile dev up -d ollama quantpilot-dev
+# bundled Ollama + 개발 컨테이너 기동
+make up
+
+# 기존 ollama 컨테이너를 쓰는 경우
+make up-external
+make ollama-network
 
 # MVP 데모 (AI 제외)
-docker compose run --rm quantpilot python scripts/run_mvp.py \
-  --symbol 005930.KS --start 2023-01-01 --end 2023-12-31 --skip-ai
+make demo
 
 # MVP 데모 (Ollama 전략 리뷰 포함)
-docker compose run --rm quantpilot python scripts/run_mvp.py \
-  --symbol 005930.KS --start 2023-01-01 --end 2023-12-31
+make demo-ai
 ```
 
 Makefile 단축 명령:
 
 ```bash
-make up        # ollama + dev container
-make demo      # MVP without AI
-make demo-ai   # MVP with Ollama review
-make shell     # dev container shell
+make up            # bundled ollama + dev container
+make up-external   # dev container only
+make ollama-network
+make demo          # MVP without AI
+make demo-ai       # MVP with Ollama review
+make shell         # dev container shell
 ```
 
-기존에 별도 Docker로 Ollama를 운영 중이라면 `.env`에서 `OLLAMA_BASE_URL`만 변경하면 됩니다.
-(예: `http://host.docker.internal:11434`)
+기존 Ollama를 호스트 포트로 노출 중이면 `.env`에서 `OLLAMA_BASE_URL=http://host.docker.internal:11434`로 변경할 수 있습니다.
 
 ### 3. 로컬 개발 (uv)
 
