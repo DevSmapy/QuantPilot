@@ -1,0 +1,166 @@
+# AI 투자 에이전트 시뮬레이션
+
+히스토리컬 시세로 **미래 정보를 차단한 paper-trading 루프**를 돌리며, LLM(또는 Hold) 에이전트가 `buy` / `sell` / `hold`로 가상 자본을 운용하는지 검증하는 MVP입니다.
+
+이 문서가 다루는 것: 공정한 시뮬레이션 루프, 매도·수익화, 매도 사유 강제.  
+다루지 않는 것: LLM 수익 보장, 차트 UI, 다종목·실거래.
+
+---
+
+## 패키지 구조
+
+```
+quantpilot/
+  environment/     # 규칙의 세계 (agent를 import하지 않음)
+    clock.py       # SimulationClock — 거래일·as_of
+    market.py      # HistoricalMarket — visible(as_of)만 노출
+    broker.py      # PaperBroker — cash, qty, pending, open 체결, close MTM
+    observation.py # ObservationBuilder → AgentObservation
+    types.py
+  agent/           # 행동 주체
+    base.py        # TradingAgent.decide(obs) -> TradeDecision
+    hold.py        # HoldAgent (항상 hold)
+    llm.py         # LlmTradingAgent (Ollama JSON)
+    decision.py    # 파싱·sell 사유 검증
+  simulation/      # 조립
+    session.py     # SimulationSession
+    result.py      # SimResult (equity curve, decision log)
+    benchmark.py   # buy-and-hold
+scripts/run_agent_sim.py
+```
+
+의존 방향: `simulation` → `environment` / `agent`. `environment`는 `agent`를 import하지 않습니다.
+
+---
+
+## 고정 규칙
+
+1. **Look-ahead 금지** — `as_of` 이후 가격은 관측·프롬프트에 넣지 않습니다. 지표는 visible 구간에만 계산합니다. 로드 시 start 이전 lookback(기본 60거래일)을 포함합니다.
+2. **하루 순서** — open으로 pending 체결 → close로 MTM → 결정일이면 결정 후 pending 등록(당일 미체결). 마지막 날에도 결정은 가능하나, 그날 pending은 **다음 날이 없어 폐기**.
+3. **행동**
+
+   | action | size | reason |
+   |--------|------|--------|
+   | `buy` | 현금의 `0 < size ≤ 1` | 선택 |
+   | `sell` | 보유수량의 `0 < size ≤ 1` | **필수** |
+   | `hold` | 무시 | 선택 |
+
+   long-only, 수수료 0, 정수 주수(내림). sell 사유 없음 / JSON 파싱 실패 / 브로커 거절 → hold. 결정은 EOD(당일 close 반영), 체결은 다음 거래일 open.
+
+4. **결정 주기** — 매 N거래일 (기본 `N=5`, `N=1`이면 매일).
+5. **기간** — `--period-days`는 달력 일수. 루프는 그 안 거래일만.
+6. **벤치마크** — buy-and-hold (첫 거래일 open 전량 매수 → 종료 close).
+
+---
+
+## 환경 변수
+
+| 변수 | 로컬 `uv run` | Docker Compose |
+|------|---------------|----------------|
+| `QSEED_DATA_PATH` | Mac의 Q-SEED data **절대 경로** | 보통 `/data/qseed` (컨테이너 내부) |
+| `QSEED_HOST_PATH` | 불필요 | Mac의 Q-SEED data 절대 경로 → `/data/qseed`로 마운트 |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | bundled면 `http://ollama:11434` |
+| `OLLAMA_MODEL` | 예: `llama3.2` | 동일 |
+| `DOCKER` | `0` | `1` |
+
+`/data/qseed`는 Docker 컨테이너 안 마운트 경로입니다. Mac에서 `uv run`할 때 그대로 쓰면 데이터를 찾지 못합니다.
+
+`host.docker.internal`은 **컨테이너 → 호스트**용입니다. Mac에서 `uv run`할 때는 `localhost`를 쓰세요.
+
+Q-SEED data 디렉터리 예시:
+
+```text
+/path/to/Q-SEED/data/
+├── stocks_0001.parquet
+├── stocks_*.parquet
+└── data_log/
+```
+
+---
+
+## 실행
+
+### Hold만 (Ollama 없이 스모크)
+
+```bash
+uv run python scripts/run_agent_sim.py \
+  --start 2024-01-02 \
+  --capital 10000000 \
+  --target 12000000 \
+  --period-days 90 \
+  --decision-every 5 \
+  --hold-only
+```
+
+### LLM 에이전트
+
+```bash
+uv run python scripts/run_agent_sim.py \
+  --symbol 005930.KS \
+  --start 2024-01-02 \
+  --capital 10000000 \
+  --target 12000000 \
+  --period-days 90 \
+  --decision-every 5 \
+  --runs 1 \
+  --model llama3.2
+```
+
+주요 플래그:
+
+| 플래그 | 기본 | 설명 |
+|--------|------|------|
+| `--start` | (필수) | 시뮬레이션 시작일 |
+| `--target` | (필수) | 목표 자산 |
+| `--capital` | 10000000 | 초기 현금 |
+| `--period-days` | 90 | 달력 일수 윈도우 |
+| `--decision-every` | 5 | N거래일마다 결정 |
+| `--runs` | 1 | 순차 반복 횟수 |
+| `--hold-only` | off | LLM 대신 HoldAgent |
+| `--model` | settings | Ollama 모델명 |
+| `--temperature` | 0.7 | Ollama temperature (`--runs` 분산용) |
+| `--seed` | 없음 | 있으면 run i에 `seed+i-1` 전달 |
+| `--lookback-sessions` | 60 | start 이전 필요 거래일 수 (미달 시 종료) |
+
+결정일마다 CLI에 `날짜 / cash / equity / action / reason`이 한 줄로 출력됩니다. 종료 시 최종 자산 vs target, buy-and-hold를 비교합니다. `--runs N`(N>1)이면 최종자산 목록과 목표 달성 횟수를 요약합니다.
+
+---
+
+## Docker 참고
+
+기존 SMA MVP 데모:
+
+```bash
+make up          # 또는 make up-external && make ollama-network
+make demo        # AI 없이
+make demo-ai     # Ollama 전략 리뷰 (run_mvp.py)
+```
+
+`make demo-ai`는 **전략 리뷰** 스크립트입니다. 에이전트 시뮬레이션은 `scripts/run_agent_sim.py`입니다.
+
+Docker 이미지와 호스트 코드가 어긋나면 `storage/metadata/shard_index.json` 형식 오류가 날 수 있습니다. 그 경우:
+
+```bash
+docker compose build quantpilot
+```
+
+---
+
+## 테스트
+
+```bash
+uv run pytest tests/test_agent_decision.py \
+  tests/test_environment_broker.py \
+  tests/test_environment_market_clock.py \
+  tests/test_simulation_session.py \
+  tests/test_package_deps.py -q
+```
+
+---
+
+## 후속 (미구현)
+
+- equity / 매매 마커 차트, Streamlit
+- 다종목 유니버스, 수수료·슬리피지
+- LM Studio, 투자 성향 모방
+- sell 사유 “품질” 재판정, consensus 종목 추천

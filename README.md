@@ -64,6 +64,7 @@ QuantPilot은 다양한 금융 데이터 소스를 하나의 인터페이스로 
 - **Strategy Engine** — 지표 기반 전략 개발 및 실행
 - **Backtesting** — Single Asset, Portfolio, Walk Forward, Rolling Window
 - **AI Research** — LLM 기반 전략 리뷰, 뉴스 요약, 투자 리포트 생성
+- **Agent Simulation** — 히스토리컬 paper-trading 에이전트 (`buy`/`sell`/`hold`, look-ahead 차단) — 상세: [`docs/agent/README.md`](docs/agent/README.md)
 - **Portfolio Engine** — Equal Weight, Mean Variance, Risk Parity 등 (예정)
 - **Trading Engine** — KIS, IB 등 브로커 API 연동 (예정)
 - **Dashboard** — Streamlit 기반 분석 UI (예정)
@@ -94,16 +95,15 @@ QuantPilot은 다양한 금융 데이터 소스를 하나의 인터페이스로 
 quantpilot/
 ├── providers/              # 데이터 공급자 (Q-SEED, Yahoo, KIS, Polygon ...)
 ├── datasource/             # DataSourceManager, Cache, Metadata
-├── storage/                # Parquet, DuckDB, PostgreSQL
-├── feature_engineering/
+├── environment/            # 에이전트 시뮬레이션 환경 (clock, market, broker)
+├── agent/                  # TradingAgent (Hold / LLM)
+├── simulation/             # SimulationSession, SimResult, buy-and-hold
 ├── strategy/
 ├── indicators/
 ├── backtest/
-├── ai/
-├── optimizer/
-├── trading/
-├── dashboard/
+├── ai/                     # Ollama 등 LLM 프로바이더
 ├── docs/
+│   └── agent/              # 에이전트 시뮬레이션 가이드
 └── tests/
 ```
 
@@ -214,6 +214,44 @@ Integration tests (Q-SEED 드라이브 마운트 필요):
 ```bash
 uv run pytest -m integration
 ```
+
+---
+
+## Agent Simulation Quick Start
+
+미래 시세를 모르는 채 거래일마다 정보를 열어 가며 LLM(또는 Hold) 에이전트가 가상 자본을 운용합니다. 상세 규칙·패키지·트러블슈팅은 [`docs/agent/README.md`](docs/agent/README.md)를 보세요.
+
+### 환경 (로컬 `uv run`)
+
+```bash
+# .env 예시
+QSEED_DATA_PATH=/absolute/path/to/Q-SEED/data   # Mac의 실제 Q-SEED data 경로
+OLLAMA_BASE_URL=http://localhost:11434          # 호스트에서 실행 시 (host.docker.internal 아님)
+OLLAMA_MODEL=llama3.2
+DOCKER=0
+```
+
+Docker Compose 안에서는 `QSEED_HOST_PATH`(호스트 경로) + 컨테이너 `QSEED_DATA_PATH=/data/qseed`, Ollama는 `http://ollama:11434`가 기본입니다.
+
+### 실행
+
+```bash
+# Ollama 없이 루프만 검증
+uv run python scripts/run_agent_sim.py \
+  --start 2024-01-02 --target 12000000 --period-days 90 --hold-only
+
+# LLM 에이전트 (매 5거래일 결정)
+uv run python scripts/run_agent_sim.py \
+  --symbol 005930.KS \
+  --start 2024-01-02 \
+  --capital 10000000 \
+  --target 12000000 \
+  --period-days 90 \
+  --decision-every 5 \
+  --runs 1
+```
+
+결정일마다 cash / equity / action / reason이 출력되고, 종료 시 목표 달성 여부와 buy-and-hold를 비교합니다.
 
 ---
 
