@@ -1,0 +1,54 @@
+services:
+  # Optional: use only if you don't have an existing Ollama container.
+  # Start with: docker compose --profile bundled-ollama up -d ollama
+  ollama:
+    profiles: ["bundled-ollama"]
+    image: ollama/ollama:latest
+    container_name: quantpilot-ollama
+    ports:
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+  quantpilot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quantpilot-app
+    env_file:
+      - .env
+    environment:
+      QSEED_DATA_PATH: /data/qseed
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      DOCKER: "1"
+    volumes:
+      - ${QSEED_HOST_PATH:-/Volumes/WD_BLACK/Careers/PythonProjects/Q-SEED/data}:/data/qseed:ro
+      - ./storage:/app/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  quantpilot-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quantpilot-dev
+    env_file:
+      - .env
+    environment:
+      QSEED_DATA_PATH: /data/qseed
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      DOCKER: "1"
+    volumes:
+      - .:/app
+      - ${QSEED_HOST_PATH:-/Volumes/WD_BLACK/Careers/PythonProjects/Q-SEED/data}:/data/qseed:ro
+      - ./storage:/app/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: sleep infinity
+
+volumes:
+  ollama_models:
