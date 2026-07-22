@@ -34,6 +34,53 @@ def test_ollama_provider_review_strategy() -> None:
     mock_client.post.assert_called_once()
 
 
+def test_ollama_provider_generate_json_format() -> None:
+    provider = OllamaProvider(base_url="http://localhost:11434", model="llama3.2")
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        "response": '{"action":"hold","size":0,"reason":"wait"}'
+    }
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.__exit__.return_value = None
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        text = provider.generate(
+            "prompt",
+            format_json=True,
+            options={"seed": 1, "temperature": 0.5},
+        )
+
+    assert "hold" in text
+    payload = mock_client.post.call_args.kwargs["json"]
+    assert payload["format"] == "json"
+    assert payload["options"] == {"seed": 1, "temperature": 0.5}
+
+
+def test_ollama_provider_empty_response_error() -> None:
+    from quantpilot.exceptions import OllamaResponseError
+
+    provider = OllamaProvider(base_url="http://localhost:11434", model="llama3.2")
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {"response": "  "}
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.__exit__.return_value = None
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(OllamaResponseError):
+            provider.generate("prompt")
+
+
+
 def test_ollama_provider_connection_error() -> None:
     provider = OllamaProvider()
 
