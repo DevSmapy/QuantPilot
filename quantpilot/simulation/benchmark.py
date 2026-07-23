@@ -47,7 +47,8 @@ def buy_and_hold_final_equity(
             costs=costs,
         )
 
-    dates = intersect_session_dates(markets, start, end)
+    selected = {symbol: markets[symbol] for symbol in ordered}
+    dates = intersect_session_dates(selected, start, end)
     if not dates:
         raise ValueError("No session dates in [start, end]")
     first, last = dates[0], dates[-1]
@@ -55,7 +56,7 @@ def buy_and_hold_final_equity(
     cash = 0.0
     equity = 0.0
     for symbol in ordered:
-        market = markets[symbol]
+        market = selected[symbol]
         first_open = float(cast(float, market.bar(first)["open"]))
         last_close = float(cast(float, market.bar(last)["close"]))
         qty, leftover = _buy_lot(sleeve, first_open, costs)

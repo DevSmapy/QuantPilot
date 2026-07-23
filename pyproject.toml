@@ -26,7 +26,7 @@ dev = [
 ]
 viz = [
     "plotly>=5.22.0",
-    "streamlit>=1.36.0",
+    "streamlit>=1.48.0",
 ]
 
 [tool.hatch.build.targets.wheel]

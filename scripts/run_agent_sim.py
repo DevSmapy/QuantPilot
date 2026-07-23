@@ -217,6 +217,8 @@ def main() -> None:
         raise SystemExit("--lookback-sessions must be >= 1")
     if args.commission_rate < 0:
         raise SystemExit("--commission-rate must be >= 0")
+    if args.commission_rate >= 1.0:
+        raise SystemExit("--commission-rate must be < 1")
     if args.slippage_bps < 0:
         raise SystemExit("--slippage-bps must be >= 0")
 

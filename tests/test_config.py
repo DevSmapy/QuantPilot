@@ -74,6 +74,17 @@ def test_docker_keeps_container_paths(
     assert settings.ollama_base_url == "http://ollama:11434"
 
 
-def test_running_in_docker_false_on_host() -> None:
-    # Unit tests run on the host / CI, not inside the app container.
+def test_running_in_docker_false_on_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("QUANTPILOT_IN_DOCKER", raising=False)
+
+    class _MissingDockerEnv:
+        def exists(self) -> bool:
+            return False
+
+    def path_factory(value: str = "") -> object:
+        if value == "/.dockerenv":
+            return _MissingDockerEnv()
+        return Path(value)
+
+    monkeypatch.setattr("quantpilot.config.Path", path_factory)
     assert running_in_docker() is False

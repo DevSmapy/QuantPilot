@@ -717,7 +717,7 @@ def main() -> None:
         try:
             symbols = _parse_symbols(symbols_raw)
             run_price_symbol = price_symbol if price_symbol in symbols else symbols[0]
-            start_d = start if isinstance(start, date) else start
+            start_d = start
             end = start_d + timedelta(days=int(period_days))
             markets = _load_markets(symbols, start_d, end, DEFAULT_LOOKBACK)
             for symbol, market in markets.items():

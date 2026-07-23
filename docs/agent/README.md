@@ -9,7 +9,7 @@
 
 ## 패키지 구조
 
-```
+```text
 quantpilot/
   environment/     # 규칙적인 세계 (agent를 import하지 않음)
     clock.py       # SimulationClock — 거래일·as_of

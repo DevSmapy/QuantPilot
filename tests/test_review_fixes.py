@@ -173,6 +173,65 @@ def test_intersect_session_dates_uses_calendar_intersection() -> None:
     assert dates == [date(2023, 1, 3), date(2023, 1, 4)]
 
 
+def test_bah_multi_symbol_intersects_only_requested_symbols() -> None:
+    """Extra markets must not shrink the BAH window for the requested subset."""
+    a = HistoricalMarket(
+        pl.DataFrame(
+            {
+                "date": [date(2023, 1, 2), date(2023, 1, 3), date(2023, 1, 4)],
+                "open": [100.0, 100.0, 100.0],
+                "high": [101.0, 101.0, 101.0],
+                "low": [99.0, 99.0, 99.0],
+                "close": [110.0, 110.0, 110.0],
+                "volume": [1, 1, 1],
+            }
+        )
+    )
+    b = HistoricalMarket(
+        pl.DataFrame(
+            {
+                "date": [date(2023, 1, 2), date(2023, 1, 3), date(2023, 1, 4)],
+                "open": [50.0, 50.0, 50.0],
+                "high": [51.0, 51.0, 51.0],
+                "low": [49.0, 49.0, 49.0],
+                "close": [55.0, 55.0, 55.0],
+                "volume": [1, 1, 1],
+            }
+        )
+    )
+    # Extra symbol with almost no overlap — must be ignored when symbols=[A,B]
+    c = HistoricalMarket(
+        pl.DataFrame(
+            {
+                "date": [date(2023, 1, 4)],
+                "open": [10.0],
+                "high": [10.0],
+                "low": [10.0],
+                "close": [10.0],
+                "volume": [1],
+            }
+        )
+    )
+    markets = {"A.KS": a, "B.KS": b, "C.KS": c}
+    equity = buy_and_hold_final_equity(
+        markets,
+        start=date(2023, 1, 1),
+        end=date(2023, 1, 10),
+        capital=20_000.0,
+        symbols=["A.KS", "B.KS"],
+    )
+    # first/last from A∩B = Jan 2..4; equal sleeves of 10_000
+    qty_a = int(10_000.0 // 100.0)
+    qty_b = int(10_000.0 // 50.0)
+    expected = (
+        (10_000.0 - qty_a * 100.0)
+        + qty_a * 110.0
+        + (10_000.0 - qty_b * 50.0)
+        + qty_b * 55.0
+    )
+    assert equity == pytest.approx(expected)
+
+
 def test_progress_event_equity_after_fill_and_holdings() -> None:
     market = HistoricalMarket(
         _prices(start=date(2023, 1, 1), days=8, open_=100.0, close=105.0)

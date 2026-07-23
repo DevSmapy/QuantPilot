@@ -1169,7 +1169,7 @@ dev = [
 ]
 viz = [
     { name = "plotly", specifier = ">=5.22.0" },
-    { name = "streamlit", specifier = ">=1.36.0" },
+    { name = "streamlit", specifier = ">=1.48.0" },
 ]
 
 [[package]]
