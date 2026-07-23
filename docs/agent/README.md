@@ -55,17 +55,18 @@ scripts/run_agent_sim.py
 
 ## 환경 변수
 
-| 변수 | 로컬 `uv run` | Docker Compose |
-|------|---------------|----------------|
-| `QSEED_DATA_PATH` | Mac의 Q-SEED data **절대 경로** | 보통 `/data/qseed` (컨테이너 내부) |
-| `QSEED_HOST_PATH` | 불필요 | Mac의 Q-SEED data 절대 경로 → `/data/qseed`로 마운트 |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | bundled면 `http://ollama:11434` |
-| `OLLAMA_MODEL` | 예: `llama3.2` | 동일 |
-| `DOCKER` | `0` | `1` |
+Mac / Windows 공통: `.env`에 **호스트 절대 경로**만 맞추면 Docker와 로컬 `uv run` 모두에서 동작합니다.
 
-`/data/qseed`는 Docker 컨테이너 안 마운트 경로입니다. Mac에서 `uv run`할 때 그대로 쓰면 데이터를 찾지 못합니다.
+| 변수 | 역할 |
+|------|------|
+| `QSEED_HOST_PATH` | Mac/Windows의 Q-SEED data **절대 경로** (필수) |
+| `QSEED_DATA_PATH` | 컨테이너 마운트 경로 (기본 `/data/qseed`) |
+| `OLLAMA_BASE_URL` | Docker 기본 `http://ollama:11434` — 호스트 `uv run`에서는 `localhost`로 자동 변환 |
+| `OLLAMA_MODEL` | 예: `llama3.2` |
+| `DOCKER` | Compose/문서용 플래그 (경로·URL 해석은 컨테이너 여부로 자동) |
 
-`host.docker.internal`은 **컨테이너 → 호스트**용입니다. Mac에서 `uv run`할 때는 `localhost`를 쓰세요.
+로컬에서 `/data/qseed`가 없으면 `QSEED_HOST_PATH`로 자동 fallback 합니다.  
+`host.docker.internal`은 **컨테이너 → 호스트**용입니다. 호스트 `uv run`에서는 `localhost`(또는 자동 변환된 URL)를 씁니다.
 
 Q-SEED data 디렉터리 예시:
 

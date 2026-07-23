@@ -195,7 +195,8 @@ Docker 없이 호스트에서 개발할 때:
 ```bash
 uv sync
 cp .env.example .env
-# 로컬에서는 OLLAMA_BASE_URL=http://localhost:11434 로 변경
+# QSEED_HOST_PATH만 본인 Mac/Windows 절대 경로로 설정하면 됨
+# (로컬에서 Ollama URL·데이터 경로는 자동 적응)
 ```
 
 ```bash
@@ -221,17 +222,17 @@ uv run pytest -m integration
 
 미래 시세를 모르는 채 거래일마다 정보를 열어 가며 LLM(또는 Hold) 에이전트가 가상 자본을 운용합니다. 상세 규칙·패키지·트러블슈팅은 [`docs/agent/README.md`](docs/agent/README.md)를 보세요.
 
-### 환경 (로컬 `uv run`)
+### 환경 (로컬 `uv run` / Docker 공통)
 
 ```bash
-# .env 예시
-QSEED_DATA_PATH=/absolute/path/to/Q-SEED/data   # Mac의 실제 Q-SEED data 경로
-OLLAMA_BASE_URL=http://localhost:11434          # 호스트에서 실행 시 (host.docker.internal 아님)
+# .env — Mac/Windows 모두 QSEED_HOST_PATH만 본인 경로로 설정
+QSEED_HOST_PATH=/absolute/path/to/Q-SEED/data   # Windows 예: D:\...\Q-SEED\data
+QSEED_DATA_PATH=/data/qseed
+OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_MODEL=llama3.2
-DOCKER=0
 ```
 
-Docker Compose 안에서는 `QSEED_HOST_PATH`(호스트 경로) + 컨테이너 `QSEED_DATA_PATH=/data/qseed`, Ollama는 `http://ollama:11434`가 기본입니다.
+호스트에서 `uv run`하면 `/data/qseed`가 없을 때 `QSEED_HOST_PATH`로 자동 fallback하고, Ollama URL도 `http://localhost:11434`로 바꿉니다. Docker Compose 안에서는 컨테이너 마운트(`/data/qseed`)와 `http://ollama:11434`를 그대로 씁니다.
 
 ### 실행
 
