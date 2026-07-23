@@ -8,6 +8,7 @@ from datetime import date, timedelta
 
 from quantpilot.agent.hold import HoldAgent
 from quantpilot.agent.llm import LlmTradingAgent
+from quantpilot.console import configure_stdio
 from quantpilot.environment.market import HistoricalMarket
 from quantpilot.factory import create_datasource_manager, create_ollama_provider
 from quantpilot.simulation.result import SimResult
@@ -161,6 +162,7 @@ def _print_result(result: SimResult, run_idx: int, runs: int) -> None:
 
 
 def main() -> None:
+    configure_stdio()
     args = parse_args()
     if args.period_days < 1:
         raise SystemExit("--period-days must be >= 1")
