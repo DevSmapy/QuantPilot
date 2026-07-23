@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from typing import cast
 
 from quantpilot.agent.base import TradingAgent
 from quantpilot.agent.decision import TradeDecision, normalize_decision
 from quantpilot.environment.broker import PaperBroker
 from quantpilot.environment.clock import SimulationClock
-from quantpilot.environment.market import HistoricalMarket
+from quantpilot.environment.costs import TradingCosts
+from quantpilot.environment.market import HistoricalMarket, intersect_session_dates
 from quantpilot.environment.observation import ObservationBuilder
 from quantpilot.environment.types import Fill
 from quantpilot.simulation.benchmark import buy_and_hold_final_equity
@@ -49,57 +51,89 @@ class SimulationSession:
     def __init__(
         self,
         *,
-        market: HistoricalMarket,
+        markets: dict[str, HistoricalMarket] | HistoricalMarket,
         agent: TradingAgent,
-        symbol: str,
+        symbols: list[str] | str,
         capital: float,
         target: float,
         decision_every: int = 5,
+        costs: TradingCosts | None = None,
         observation_builder: ObservationBuilder | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> None:
         if decision_every < 1:
             raise ValueError("decision_every must be >= 1")
-        self._market = market
+
+        if isinstance(markets, HistoricalMarket):
+            symbol = symbols if isinstance(symbols, str) else symbols[0]
+            self._markets = {symbol: markets}
+            self._symbols = [symbol]
+        else:
+            if isinstance(symbols, str):
+                ordered = [symbols]
+            else:
+                ordered = list(symbols)
+            if not ordered:
+                raise ValueError("symbols must not be empty")
+            missing = [s for s in ordered if s not in markets]
+            if missing:
+                raise KeyError(f"Missing markets for symbols: {missing}")
+            self._markets = {s: markets[s] for s in ordered}
+            self._symbols = ordered
+
         self._agent = agent
-        self._symbol = symbol
         self._capital = capital
         self._target = target
         self._decision_every = decision_every
+        self._costs = costs or TradingCosts()
         self._builder = observation_builder or ObservationBuilder()
         self._on_progress = on_progress
 
+    @property
+    def symbols(self) -> list[str]:
+        return list(self._symbols)
+
     def run(self, start: date, end: date) -> SimResult:
-        dates = self._market.session_dates(start, end)
+        dates = intersect_session_dates(self._markets, start, end)
         if not dates:
             raise ValueError(f"No trading sessions between {start} and {end}")
 
         clock = SimulationClock(dates)
-        broker = PaperBroker(self._capital)
+        broker = PaperBroker(self._capital, costs=self._costs)
         equity_curve: list[EquityPoint] = []
         decisions: list[DecisionRecord] = []
         fills: list[Fill] = []
         fill_rejects: list[FillReject] = []
+        default_symbol = self._symbols[0]
 
         while True:
             as_of = clock.as_of
-            bar = self._market.bar(as_of)
-            open_price = float(bar["open"])
-            close_price = float(bar["close"])
+            opens = {
+                symbol: float(cast(float, self._markets[symbol].bar(as_of)["open"]))
+                for symbol in self._symbols
+            }
+            closes = {
+                symbol: float(cast(float, self._markets[symbol].bar(as_of)["close"]))
+                for symbol in self._symbols
+            }
 
-            # 1) Fill prior-day pending at today's open (never same-day as decision).
-            fill_result = broker.fill_pending(open_price, as_of)
-            fill = fill_result.fill
-            if fill is not None:
-                fills.append(fill)
-            elif fill_result.rejected_reason is not None:
-                fill_rejects.append(
-                    FillReject(date=as_of, reason=fill_result.rejected_reason)
-                )
+            fill: Fill | None = None
+            fill_rejected: str | None = None
+            pending = broker.pending
+            if pending is not None:
+                open_price = opens[pending.symbol]
+                fill_result = broker.fill_pending(open_price, as_of)
+                fill = fill_result.fill
+                if fill is not None:
+                    fills.append(fill)
+                elif fill_result.rejected_reason is not None:
+                    fill_rejected = fill_result.rejected_reason
+                    fill_rejects.append(
+                        FillReject(date=as_of, reason=fill_result.rejected_reason)
+                    )
 
-            # 2) Mark to market at close.
-            equity = broker.mark_to_market(close_price)
-            snap = broker.snapshot(close_price)
+            equity = broker.mark_to_market(closes)
+            snap = broker.snapshot(closes)
             equity_curve.append(
                 EquityPoint(
                     date=as_of,
@@ -109,14 +143,15 @@ class SimulationSession:
                 )
             )
 
-            # 3) End-of-day decision (may include last day; that pending is discarded).
-            decision_record: DecisionRecord | None = None
             applied: TradeDecision | None = None
             if clock.is_decision_day(self._decision_every):
-                visible = self._market.visible(as_of)
+                visibles = {
+                    symbol: self._markets[symbol].visible(as_of)
+                    for symbol in self._symbols
+                }
                 obs = self._builder.build(
-                    symbol=self._symbol,
-                    visible=visible,
+                    symbols=self._symbols,
+                    visibles=visibles,
                     as_of=as_of,
                     portfolio=snap,
                     capital=self._capital,
@@ -126,18 +161,24 @@ class SimulationSession:
                     session_count=clock.session_count,
                 )
                 requested = self._agent.decide(obs)
-                applied = normalize_decision(requested)
+                applied = normalize_decision(
+                    requested,
+                    universe=self._symbols,
+                    default_symbol=default_symbol,
+                )
+                queue_symbol = applied.symbol or default_symbol
                 queue_result = broker.queue(
                     applied.action,
                     applied.size,
                     applied.reason,
                     as_of,
+                    symbol=queue_symbol,
                 )
                 detail = queue_result.message
                 queued = queue_result.accepted and applied.action != "hold"
                 if not queue_result.accepted and applied.action != "hold":
                     applied = TradeDecision.hold(reason=queue_result.message)
-                    broker.queue("hold", 0.0, applied.reason, as_of)
+                    broker.queue("hold", 0.0, applied.reason, as_of, symbol=default_symbol)
                     queued = False
                     detail = queue_result.message
 
@@ -160,7 +201,7 @@ class SimulationSession:
                         qty=snap.qty,
                         decision=applied,
                         fill=fill,
-                        fill_rejected=fill_result.rejected_reason,
+                        fill_rejected=fill_rejected,
                     )
                 )
 
@@ -182,14 +223,16 @@ class SimulationSession:
 
         final_equity = equity_curve[-1].equity
         bah = buy_and_hold_final_equity(
-            self._market,
+            self._markets,
             start=start,
             end=end,
             capital=self._capital,
+            symbols=self._symbols,
         )
 
         return SimResult(
-            symbol=self._symbol,
+            symbol=self._symbols[0],
+            symbols=list(self._symbols),
             start=dates[0],
             end=dates[-1],
             capital=self._capital,
@@ -202,4 +245,5 @@ class SimulationSession:
             fill_rejects=fill_rejects,
             discarded_pending=discarded,
             buy_and_hold_equity=bah,
+            total_fees=broker.total_fees,
         )

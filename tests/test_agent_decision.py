@@ -50,3 +50,25 @@ def test_normalize_sell_without_reason_becomes_hold() -> None:
     )
     assert demoted.action == "hold"
     assert demoted.reason == "sell_requires_reason"
+
+
+def test_multi_symbol_requires_symbol() -> None:
+    assert (
+        validate_trade_decision(
+            {"action": "buy", "size": 0.5, "reason": "x"},
+            universe=["A.KS", "B.KS"],
+        )
+        is None
+    )
+    ok = validate_trade_decision(
+        {"action": "buy", "size": 0.5, "reason": "x", "symbol": "A.KS"},
+        universe=["A.KS", "B.KS"],
+    )
+    assert ok is not None
+    assert ok.symbol == "A.KS"
+    demoted = normalize_decision(
+        TradeDecision(action="buy", size=0.5, reason="x"),
+        universe=["A.KS", "B.KS"],
+    )
+    assert demoted.action == "hold"
+    assert demoted.reason == "symbol_required"

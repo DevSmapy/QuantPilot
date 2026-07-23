@@ -47,39 +47,68 @@ class LlmTradingAgent(TradingAgent):
                 return TradeDecision.hold(reason="llm_unavailable")
             decision = parse_trade_decision(raw)
             if decision is not None:
-                if decision.action == "sell" and observation.portfolio.qty <= 0:
-                    return TradeDecision.hold(reason="sell_with_zero_qty")
+                if decision.action == "sell":
+                    symbol = decision.symbol or (
+                        observation.symbols[0] if len(observation.symbols) == 1 else None
+                    )
+                    qty = (
+                        observation.portfolio.holdings.get(symbol, 0)
+                        if symbol is not None
+                        else 0
+                    )
+                    if qty <= 0:
+                        return TradeDecision.hold(reason="sell_with_zero_qty")
                 return decision
         return TradeDecision.hold(reason="invalid_llm_decision")
 
 
 def _build_prompt(obs: AgentObservation) -> str:
-    bars = "\n".join(
-        f"- {b['date']}: open={b['open']}, close={b['close']}, volume={b['volume']}"
-        for b in obs.recent_bars
-    )
     port = obs.portfolio
+    holdings = ", ".join(
+        f"{symbol}:{qty}" for symbol, qty in sorted(port.holdings.items())
+    ) or "(none)"
+    multi = len(obs.symbols) > 1
+    schema = (
+        '{"action":"buy"|"sell"|"hold","size":number,"reason":string,"symbol":string}'
+        if multi
+        else '{"action":"buy"|"sell"|"hold","size":number,"reason":string}'
+    )
+    symbol_rule = (
+        "- For buy/sell, symbol MUST be one of the universe tickers.\n"
+        if multi
+        else ""
+    )
+    legs_text: list[str] = []
+    for leg in obs.legs:
+        bars = "\n".join(
+            f"  - {b['date']}: open={b['open']}, close={b['close']}, volume={b['volume']}"
+            for b in leg.recent_bars
+        )
+        legs_text.append(
+            f"Symbol {leg.symbol}:\n"
+            f"  SMA20={leg.sma_20} SMA60={leg.sma_60} RSI14={leg.rsi_14}\n"
+            f"  Recent bars:\n{bars}"
+        )
     return (
         "You are a long-only paper trader. Reply with ONLY one JSON object.\n"
-        'Schema: {"action":"buy"|"sell"|"hold","size":number,"reason":string}\n'
+        f"Schema: {schema}\n"
         "- buy size: fraction of cash to spend (0 < size <= 1)\n"
         "- sell size: fraction of shares to sell (0 < size <= 1)\n"
         "- hold: size ignored\n"
         "- If action is sell, reason MUST be a non-empty explanation.\n"
+        f"{symbol_rule}"
         "- No shorting. You cannot see future prices.\n"
         "- Decisions are end-of-day using today's close; orders fill at the next open.\n\n"
-        f"Symbol: {obs.symbol}\n"
+        f"Universe: {', '.join(obs.symbols)}\n"
         f"As of: {obs.as_of}\n"
         f"Session: {obs.session_index + 1}/{obs.session_count} "
         f"(remaining={obs.remaining_sessions})\n"
         f"Capital: {obs.capital:.2f}\n"
         f"Target: {obs.target:.2f}\n"
         f"Cash: {port.cash:.2f}\n"
-        f"Qty: {port.qty}\n"
+        f"Holdings: {holdings}\n"
         f"Equity: {port.equity:.2f}\n"
-        f"Unrealized PnL: {port.unrealized_pnl:.2f}\n"
-        f"SMA20: {obs.sma_20}\n"
-        f"SMA60: {obs.sma_60}\n"
-        f"RSI14: {obs.rsi_14}\n"
-        f"Recent bars:\n{bars}\n"
+        f"Unrealized PnL: {port.unrealized_pnl:.2f}\n\n"
+        + "\n\n".join(legs_text)
+        + "\n"
     )

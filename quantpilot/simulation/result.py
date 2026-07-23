@@ -51,6 +51,12 @@ class SimResult:
     fill_rejects: list[FillReject] = field(default_factory=list)
     discarded_pending: PendingOrder | None = None
     buy_and_hold_equity: float | None = None
+    symbols: list[str] = field(default_factory=list)
+    total_fees: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.symbols:
+            self.symbols = [self.symbol]
 
     @property
     def total_return(self) -> float:
