@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import cast
 
+from quantpilot.environment.costs import TradingCosts
 from quantpilot.environment.market import HistoricalMarket, intersect_session_dates
 
 
@@ -15,14 +16,18 @@ def buy_and_hold_final_equity(
     end: date,
     capital: float,
     symbols: list[str] | None = None,
+    costs: TradingCosts | None = None,
 ) -> float:
     """Buy max integer shares at first open(s); value at last close.
 
-    Single-market (legacy): pass one ``HistoricalMarket``.
-    Multi-symbol: equal cash split across ``symbols``, no fees/slippage.
+    Entry uses the same ``TradingCosts`` as the agent (slippage + commission).
+    Positions are marked at the last close without an exit trade.
     """
+    costs = costs or TradingCosts()
     if isinstance(markets, HistoricalMarket):
-        return _single_bah(markets, start=start, end=end, capital=capital)
+        return _single_bah(
+            markets, start=start, end=end, capital=capital, costs=costs
+        )
 
     if not markets:
         raise ValueError("markets must not be empty")
@@ -34,7 +39,13 @@ def buy_and_hold_final_equity(
         raise KeyError(f"Missing markets for symbols: {missing}")
 
     if len(ordered) == 1:
-        return _single_bah(markets[ordered[0]], start=start, end=end, capital=capital)
+        return _single_bah(
+            markets[ordered[0]],
+            start=start,
+            end=end,
+            capital=capital,
+            costs=costs,
+        )
 
     dates = intersect_session_dates(markets, start, end)
     if not dates:
@@ -47,12 +58,34 @@ def buy_and_hold_final_equity(
         market = markets[symbol]
         first_open = float(cast(float, market.bar(first)["open"]))
         last_close = float(cast(float, market.bar(last)["close"]))
-        if first_open <= 0:
-            raise ValueError(f"first open price must be > 0 for {symbol}")
-        qty = int(sleeve // first_open)
-        cash += sleeve - qty * first_open
+        qty, leftover = _buy_lot(sleeve, first_open, costs)
+        cash += leftover
         equity += qty * last_close
     return cash + equity
+
+
+def _buy_lot(
+    cash: float,
+    open_price: float,
+    costs: TradingCosts,
+) -> tuple[int, float]:
+    """Return (shares, leftover_cash) after a full-sleeve buy with costs."""
+    if open_price <= 0:
+        raise ValueError("open price must be > 0")
+    exec_price = costs.exec_price(open_price, action="buy")
+    if exec_price <= 0:
+        raise ValueError("exec price must be > 0")
+    rate = costs.commission_rate
+    max_notional = cash / (1.0 + rate) if rate > 0 else cash
+    qty = int(max_notional // exec_price)
+    if qty <= 0:
+        return 0, cash
+    notional = qty * exec_price
+    fee = costs.commission(notional)
+    leftover = cash - notional - fee
+    if leftover < -1e-9:
+        return 0, cash
+    return qty, leftover
 
 
 def _single_bah(
@@ -61,14 +94,12 @@ def _single_bah(
     start: date,
     end: date,
     capital: float,
+    costs: TradingCosts,
 ) -> float:
     dates = market.session_dates(start, end)
     if not dates:
         raise ValueError("No session dates in [start, end]")
     first_open = float(cast(float, market.bar(dates[0])["open"]))
     last_close = float(cast(float, market.bar(dates[-1])["close"]))
-    if first_open <= 0:
-        raise ValueError("first open price must be > 0")
-    qty = int(capital // first_open)
-    cash = capital - qty * first_open
+    qty, cash = _buy_lot(capital, first_open, costs)
     return cash + qty * last_close

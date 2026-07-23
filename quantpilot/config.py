@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     qseed_host_path: Path | None = None
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llama3.2"
+    # Informational DOCKER= env flag only. Path/URL resolution uses
+    # ``running_in_docker()`` (/.dockerenv or QUANTPILOT_IN_DOCKER), not this field.
     docker: bool = False
 
     @model_validator(mode="after")
@@ -47,6 +49,8 @@ class Settings(BaseSettings):
         - ``QSEED_HOST_PATH`` = real host data directory
         - ``QSEED_DATA_PATH=/data/qseed`` = container mount (used when it exists)
         - ``OLLAMA_BASE_URL=http://ollama:11434`` rewritten to localhost on host
+
+        Resolution keys off ``running_in_docker()``, not the ``docker`` setting.
         """
         if not running_in_docker():
             if not self.qseed_data_path.exists() and self.qseed_host_path is not None:

@@ -30,6 +30,10 @@ class ProgressEvent:
 
     Timing: orders decided at end-of-day (with that day's close) fill at the
     next session's open — not same-bar look-ahead into future dates.
+
+    ``equity`` is end-of-day mark-to-market at closes. When a fill occurs,
+    ``equity_after_fill`` is mark-to-market at that session's opens (post-fill).
+    ``qty`` is total share count across symbols (prefer ``holdings``).
     """
 
     date: date
@@ -42,6 +46,7 @@ class ProgressEvent:
     discarded_pending: bool = False
     holdings: dict[str, int] = field(default_factory=dict)
     avg_costs: dict[str, float] = field(default_factory=dict)
+    equity_after_fill: float | None = None
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -121,6 +126,7 @@ class SimulationSession:
 
             fill: Fill | None = None
             fill_rejected: str | None = None
+            equity_after_fill: float | None = None
             pending = broker.pending
             if pending is not None:
                 open_price = opens[pending.symbol]
@@ -128,6 +134,7 @@ class SimulationSession:
                 fill = fill_result.fill
                 if fill is not None:
                     fills.append(fill)
+                    equity_after_fill = broker.mark_to_market(opens)
                 elif fill_result.rejected_reason is not None:
                     fill_rejected = fill_result.rejected_reason
                     fill_rejects.append(
@@ -141,7 +148,9 @@ class SimulationSession:
                     date=as_of,
                     equity=equity,
                     cash=snap.cash,
-                    qty=snap.qty,
+                    qty=snap.total_shares,
+                    holdings=dict(snap.holdings),
+                    equity_after_fill=equity_after_fill,
                 )
             )
 
@@ -200,12 +209,13 @@ class SimulationSession:
                         date=as_of,
                         cash=snap.cash,
                         equity=equity,
-                        qty=snap.qty,
+                        qty=snap.total_shares,
                         decision=applied,
                         fill=fill,
                         fill_rejected=fill_rejected,
                         holdings=dict(snap.holdings),
                         avg_costs=dict(snap.avg_costs),
+                        equity_after_fill=equity_after_fill,
                     )
                 )
 
@@ -237,6 +247,7 @@ class SimulationSession:
             end=end,
             capital=self._capital,
             symbols=self._symbols,
+            costs=self._costs,
         )
 
         return SimResult(

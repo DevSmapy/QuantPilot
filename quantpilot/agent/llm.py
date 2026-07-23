@@ -45,7 +45,7 @@ class LlmTradingAgent(TradingAgent):
                 )
             except Exception:
                 return TradeDecision.hold(reason="llm_unavailable")
-            decision = parse_trade_decision(raw)
+            decision = parse_trade_decision(raw, universe=observation.symbols)
             if decision is not None:
                 if decision.action == "sell":
                     symbol = decision.symbol or (

@@ -51,7 +51,7 @@ scripts/streamlit_agent_sim.py
 
 4. **결정 주기** — 매 N거래일 (기본 `N=5`, `N=1`이면 매일).
 5. **기간** — `--period-days`는 달력 일수. 루프는 그 안 거래일만.
-6. **벤치마크** — buy-and-hold 최종 자산(수수료 미적용). 다종목은 현금 균등 분할.
+6. **벤치마크** — buy-and-hold 최종 자산. **에이전트와 동일한** `TradingCosts`(진입 슬리피지·수수료)를 적용하고, 마지막 close로 평가합니다(청산 거래 없음). 다종목은 현금 균등 분할.
 
 ---
 
@@ -131,10 +131,10 @@ uv run streamlit run scripts/streamlit_agent_sim.py
 
 사이드바에서 심볼·주가 종목·차트 종류(Close line / Candlestick)·기간·비용·hold-only를 설정한 뒤 실행합니다.
 
-- 진행 중: equity·주가 차트 live 갱신, 진행률, **Trade log**(체결일·action·종목·주수·체결가·notional·fee·매도 사유). LLM 사용 시 결정 직전 `Waiting for Ollama…` 표시.
-- Equity: target·Buy&Hold(완료 시) 수평선, 매수/매도 마커.
-- 주가: 평균단가 점선(보유 구간만). Close line 모드 마커는 **close**에 맞춤(hover는 체결가). Candlestick 모드 마커는 **체결가**.
-- 완료 후 equity/fills CSV 다운로드.
+- 진행 중: equity·주가 차트 live 갱신, 진행률, **Trade log**(체결일·action·종목·주수·체결가·notional·fee·매도 사유). LLM 사용 시 결정 직전 `Waiting for Ollama…` 표시. 결과는 `st.session_state`에 보관되어 위젯 변경 후에도 유지됩니다.
+- Equity: target 수평선, Buy&Hold **최종** 자산 마커(일별 경로 아님; 에이전트와 동일 비용), 매수/매도 마커는 체결 직후 open MTM.
+- 주가: 평균단가 점선(보유 구간만). Close line 모드 마커는 **close**에 맞춤(hover는 체결가). Candlestick 모드 마커는 **체결가**(슬리피지 시 봉 H/L 밖일 수 있음).
+- 완료 후 equity/fills CSV 다운로드 (`total_shares` + `holdings` 컬럼).
 
 주요 플래그:
 

@@ -59,15 +59,19 @@ class PaperBroker:
     def holdings(self) -> dict[str, int]:
         return {symbol: pos.qty for symbol, pos in self._positions.items() if pos.qty}
 
+    def _require_prices(self, prices: dict[str, float]) -> None:
+        missing = [symbol for symbol in self.holdings() if symbol not in prices]
+        if missing:
+            raise KeyError(f"Missing mark prices for holdings: {missing}")
+
     def snapshot(self, prices: dict[str, float]) -> PortfolioSnapshot:
+        self._require_prices(prices)
         holdings = self.holdings()
-        avg_costs = {
-            symbol: self.avg_cost(symbol) for symbol in holdings
-        }
+        avg_costs = {symbol: self.avg_cost(symbol) for symbol in holdings}
         equity = self._cash
         unrealized = 0.0
         for symbol, qty in holdings.items():
-            price = prices.get(symbol, 0.0)
+            price = prices[symbol]
             equity += qty * price
             unrealized += (price - avg_costs[symbol]) * qty
         return PortfolioSnapshot(
@@ -146,8 +150,6 @@ class PaperBroker:
         # Solve shares so shares*price + commission(shares*price) <= budget.
         budget = self._cash * order.size
         rate = self._costs.commission_rate
-        if rate >= 1.0:
-            return FillResult(fill=None, rejected_reason="zero_shares")
         max_notional = budget / (1.0 + rate) if rate > 0 else budget
         shares = int(max_notional // exec_price)
         if shares <= 0:
@@ -213,10 +215,11 @@ class PaperBroker:
 
     def mark_to_market(self, prices: dict[str, float]) -> float:
         """Return equity at the given mark prices."""
+        self._require_prices(prices)
         equity = self._cash
         for symbol, pos in self._positions.items():
             if pos.qty:
-                equity += pos.qty * prices.get(symbol, 0.0)
+                equity += pos.qty * prices[symbol]
         return equity
 
     def discard_pending(self) -> PendingOrder | None:

@@ -117,7 +117,15 @@ def _parse_symbols(args: argparse.Namespace) -> list[str]:
 
 
 def _progress(event: ProgressEvent) -> None:
-    parts = [f"[{event.date}] cash={event.cash:,.0f} equity={event.equity:,.0f} qty={event.qty}"]
+    holdings = (
+        ",".join(f"{s}:{q}" for s, q in sorted(event.holdings.items())) or "(none)"
+    )
+    parts = [
+        f"[{event.date}] cash={event.cash:,.0f} equity={event.equity:,.0f} "
+        f"total_shares={event.qty} holdings={holdings}"
+    ]
+    if event.equity_after_fill is not None:
+        parts.append(f"equity_after_fill={event.equity_after_fill:,.0f}")
     if event.fill is not None:
         parts.append(
             f"fill={event.fill.symbol}:{event.fill.action}:"
@@ -181,7 +189,8 @@ def _print_result(result: SimResult, run_idx: int, runs: int) -> None:
     if result.buy_and_hold_equity is not None:
         bah_ret = (result.buy_and_hold_equity / result.capital) - 1.0
         print(
-            f"Buy&Hold     : {result.buy_and_hold_equity:,.0f} ({bah_ret:+.2%})"
+            f"Buy&Hold     : {result.buy_and_hold_equity:,.0f} ({bah_ret:+.2%}) "
+            f"[same costs as agent]"
         )
     print(f"Decisions    : {len(result.decisions)}")
     print(f"Fills        : {len(result.fills)}")

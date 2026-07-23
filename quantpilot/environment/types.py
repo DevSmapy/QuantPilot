@@ -19,15 +19,22 @@ class PortfolioSnapshot:
     unrealized_pnl: float
 
     @property
-    def qty(self) -> int:
-        """Total shares across holdings (logging / KPI)."""
+    def total_shares(self) -> int:
+        """Sum of share counts across symbols (notional-blind; prefer holdings)."""
         return sum(self.holdings.values())
 
     @property
+    def qty(self) -> int:
+        """Alias for total_shares (kept for CLI/KPI compatibility)."""
+        return self.total_shares
+
+    @property
     def stock_value(self) -> float:
+        missing = [s for s in self.holdings if s not in self.mark_prices]
+        if missing:
+            raise KeyError(f"Missing mark prices for holdings: {missing}")
         return sum(
-            self.holdings.get(symbol, 0) * self.mark_prices.get(symbol, 0.0)
-            for symbol in set(self.holdings) | set(self.mark_prices)
+            qty * self.mark_prices[symbol] for symbol, qty in self.holdings.items()
         )
 
 

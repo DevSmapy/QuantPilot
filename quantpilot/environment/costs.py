@@ -15,6 +15,8 @@ class TradingCosts:
     def __post_init__(self) -> None:
         if self.commission_rate < 0:
             raise ValueError("commission_rate must be >= 0")
+        if self.commission_rate >= 1.0:
+            raise ValueError("commission_rate must be < 1")
         if self.slippage_bps < 0:
             raise ValueError("slippage_bps must be >= 0")
 

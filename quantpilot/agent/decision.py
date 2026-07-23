@@ -24,12 +24,16 @@ class TradeDecision:
         return TradeDecision(action="hold", size=0.0, reason=reason, symbol=symbol)
 
 
-def parse_trade_decision(raw: str) -> TradeDecision | None:
+def parse_trade_decision(
+    raw: str,
+    *,
+    universe: list[str] | None = None,
+) -> TradeDecision | None:
     """Parse model JSON into TradeDecision. Return None if invalid."""
     payload = _extract_json_object(raw)
     if payload is None:
         return None
-    return validate_trade_decision(payload)
+    return validate_trade_decision(payload, universe=universe)
 
 
 def validate_trade_decision(
