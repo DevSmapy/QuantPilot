@@ -241,6 +241,12 @@ OLLAMA_MODEL=llama3.2
 uv run python scripts/run_agent_sim.py \
   --start 2024-01-02 --target 12000000 --period-days 90 --hold-only
 
+# 다종목 + 수수료/슬리피지
+uv run python scripts/run_agent_sim.py \
+  --symbols 005930.KS,000660.KS \
+  --start 2024-01-02 --target 12000000 --period-days 90 \
+  --commission-rate 0.00015 --slippage-bps 5 --hold-only
+
 # LLM 에이전트 (매 5거래일 결정)
 uv run python scripts/run_agent_sim.py \
   --symbol 005930.KS \
@@ -250,9 +256,13 @@ uv run python scripts/run_agent_sim.py \
   --period-days 90 \
   --decision-every 5 \
   --runs 1
+
+# Streamlit equity / 매매 마커
+uv sync --group viz
+uv run streamlit run scripts/streamlit_agent_sim.py
 ```
 
-결정일마다 cash / equity / action / reason이 출력되고, 종료 시 목표 달성 여부와 buy-and-hold를 비교합니다.
+결정일마다 cash / equity / action / reason이 출력되고, 종료 시 목표 달성 여부·fees·buy-and-hold를 비교합니다.
 
 ---
 

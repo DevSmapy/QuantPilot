@@ -2,8 +2,8 @@
 
 히스토리컬 시세로 **미래 정보를 차단한 paper-trading 루프**를 돌리며, LLM(또는 Hold) 에이전트가 `buy` / `sell` / `hold`로 가상 자본을 운용하는지 검증하는 MVP입니다.
 
-이 문서가 다루는 것: 공정한 시뮬레이션 루프, 매도·수익화, 매도 사유 강제.  
-다루지 않는 것: LLM 수익 보장, 차트 UI, 다종목·실거래.
+이 문서가 다루는 것: 공정한 시뮬레이션 루프, 매도·수익화, 매도 사유 강제, 다종목·비용, Streamlit 차트.  
+다루지 않는 것: LLM 수익 보장, 실거래.
 
 ---
 
@@ -11,22 +11,24 @@
 
 ```
 quantpilot/
-  environment/     # 규칙의 세계 (agent를 import하지 않음)
+  environment/     # 규칙적인 세계 (agent를 import하지 않음)
     clock.py       # SimulationClock — 거래일·as_of
-    market.py      # HistoricalMarket — visible(as_of)만 노출
-    broker.py      # PaperBroker — cash, qty, pending, open 체결, close MTM
-    observation.py # ObservationBuilder → AgentObservation
+    market.py      # HistoricalMarket + intersect_session_dates
+    costs.py       # TradingCosts (commission_rate, slippage_bps)
+    broker.py      # PaperBroker — multi-symbol holdings, pending, fees
+    observation.py # ObservationBuilder → AgentObservation (legs)
     types.py
   agent/           # 행동 주체
     base.py        # TradingAgent.decide(obs) -> TradeDecision
     hold.py        # HoldAgent (항상 hold)
     llm.py         # LlmTradingAgent (Ollama JSON)
-    decision.py    # 파싱·sell 사유 검증
+    decision.py    # 파싱·sell 사유·symbol 검증
   simulation/      # 조립
     session.py     # SimulationSession
-    result.py      # SimResult (equity curve, decision log)
-    benchmark.py   # buy-and-hold
+    result.py      # SimResult (equity curve, decision log, fees)
+    benchmark.py   # buy-and-hold (단일 / equal-weight 다종목)
 scripts/run_agent_sim.py
+scripts/streamlit_agent_sim.py
 ```
 
 의존 방향: `simulation` → `environment` / `agent`. `environment`는 `agent`를 import하지 않습니다.
@@ -39,17 +41,17 @@ scripts/run_agent_sim.py
 2. **하루 순서** — open으로 pending 체결 → close로 MTM → 결정일이면 결정 후 pending 등록(당일 미체결). 마지막 날에도 결정은 가능하나, 그날 pending은 **다음 날이 없어 폐기**.
 3. **행동**
 
-   | action | size | reason |
-   |--------|------|--------|
-   | `buy` | 현금의 `0 < size ≤ 1` | 선택 |
-   | `sell` | 보유수량의 `0 < size ≤ 1` | **필수** |
-   | `hold` | 무시 | 선택 |
+   | action | size | reason | symbol |
+   |--------|------|--------|--------|
+   | `buy` | 현금의 `0 < size ≤ 1` | 선택 | 유니버스 >1이면 **필수** |
+   | `sell` | 해당 종목 수량의 `0 < size ≤ 1` | **필수** | 유니버스 >1이면 **필수** |
+   | `hold` | 무시 | 선택 | 선택 |
 
-   long-only, 수수료 0, 정수 주수(내림). sell 사유 없음 / JSON 파싱 실패 / 브로커 거절 → hold. 결정은 EOD(당일 close 반영), 체결은 다음 거래일 open.
+   long-only, 정수 주수(내림). 기본 수수료·슬리피지 0 (`--commission-rate`, `--slippage-bps`로 변경). sell 사유 없음 / JSON 파싱 실패 / 브로커 거절 → hold. 결정은 EOD(당일 close 반영), 체결은 다음 거래일 open. pending은 한 건. 다종목 세션 달력은 유니버스 **교집합**.
 
 4. **결정 주기** — 매 N거래일 (기본 `N=5`, `N=1`이면 매일).
 5. **기간** — `--period-days`는 달력 일수. 루프는 그 안 거래일만.
-6. **벤치마크** — buy-and-hold (첫 거래일 open 전량 매수 → 종료 close).
+6. **벤치마크** — buy-and-hold 최종 자산(수수료 미적용). 다종목은 현금 균등 분할.
 
 ---
 
@@ -93,6 +95,19 @@ uv run python scripts/run_agent_sim.py \
   --hold-only
 ```
 
+### 다종목 + 비용
+
+```bash
+uv run python scripts/run_agent_sim.py \
+  --symbols 005930.KS,000660.KS \
+  --start 2024-01-02 \
+  --target 12000000 \
+  --period-days 90 \
+  --commission-rate 0.00015 \
+  --slippage-bps 5 \
+  --hold-only
+```
+
 ### LLM 에이전트
 
 ```bash
@@ -107,15 +122,28 @@ uv run python scripts/run_agent_sim.py \
   --model llama3.2
 ```
 
+### Streamlit 차트
+
+```bash
+uv sync --group viz
+uv run streamlit run scripts/streamlit_agent_sim.py
+```
+
+사이드바에서 심볼·기간·비용·hold-only를 설정한 뒤 실행하면 equity 곡선과 buy/sell 마커를 그립니다.
+
 주요 플래그:
 
 | 플래그 | 기본 | 설명 |
 |--------|------|------|
 | `--start` | (필수) | 시뮬레이션 시작일 |
 | `--target` | (필수) | 목표 자산 |
+| `--symbol` | `005930.KS` | 단일 종목 |
+| `--symbols` | 없음 | 콤마 구분 다종목 (`--symbol`보다 우선) |
 | `--capital` | 10000000 | 초기 현금 |
 | `--period-days` | 90 | 달력 일수 윈도우 |
 | `--decision-every` | 5 | N거래일마다 결정 |
+| `--commission-rate` | 0 | 수수료율 (notional 비율) |
+| `--slippage-bps` | 0 | 슬리피지 (bps) |
 | `--runs` | 1 | 순차 반복 횟수 |
 | `--hold-only` | off | LLM 대신 HoldAgent |
 | `--model` | settings | Ollama 모델명 |
@@ -123,7 +151,7 @@ uv run python scripts/run_agent_sim.py \
 | `--seed` | 없음 | 있으면 run i에 `seed+i-1` 전달 |
 | `--lookback-sessions` | 60 | start 이전 필요 거래일 수 (미달 시 종료) |
 
-결정일마다 CLI에 `날짜 / cash / equity / action / reason`이 한 줄로 출력됩니다. 종료 시 최종 자산 vs target, buy-and-hold를 비교합니다. `--runs N`(N>1)이면 최종자산 목록과 목표 달성 횟수를 요약합니다.
+결정일마다 CLI에 `날짜 / cash / equity / action / reason`이 한 줄로 출력됩니다. 종료 시 최종 자산 vs target, fees, buy-and-hold를 비교합니다. `--runs N`(N>1)이면 최종자산 목록과 목표 달성 횟수를 요약합니다.
 
 ---
 
@@ -161,7 +189,5 @@ uv run pytest tests/test_agent_decision.py \
 
 ## 후속 (미구현)
 
-- equity / 매매 마커 차트, Streamlit
-- 다종목 유니버스, 수수료·슬리피지
 - LM Studio, 투자 성향 모방
 - sell 사유 “품질” 재판정, consensus 종목 추천
