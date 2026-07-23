@@ -49,11 +49,15 @@ class _OhlcBar:
 
 
 @dataclass
-class _LogRow:
+class _TradeLogRow:
+    """One executed fill for the Streamlit trade log."""
+
     date: str
     action: str
     symbol: str
-    size: float
+    qty: int
+    price: float
+    fee: float
     reason: str
 
 
@@ -68,7 +72,7 @@ class _LiveChartState:
     ohlc: list[_OhlcBar] = field(default_factory=list)
     buys: list[_TradeMarker] = field(default_factory=list)
     sells: list[_TradeMarker] = field(default_factory=list)
-    log_rows: list[_LogRow] = field(default_factory=list)
+    trade_rows: list[_TradeLogRow] = field(default_factory=list)
     day_index: int = 0
 
     def observe(
@@ -91,16 +95,6 @@ class _LiveChartState:
         self.avg_costs.append(avg if qty > 0 and avg is not None else None)
         if event.fill is not None:
             self._record_fill(event.fill, event.equity, ohlc.close)
-        if event.decision is not None:
-            self.log_rows.append(
-                _LogRow(
-                    date=day,
-                    action=event.decision.action,
-                    symbol=event.decision.symbol or "",
-                    size=event.decision.size,
-                    reason=event.decision.reason,
-                )
-            )
 
     def _record_fill(self, fill: Fill, equity: float, close_price: float) -> None:
         marker = _TradeMarker(
@@ -115,6 +109,19 @@ class _LiveChartState:
             self.buys.append(marker)
         elif fill.action == "sell":
             self.sells.append(marker)
+        # Sell requires a reason by rule; buy reason is optional and omitted in the log.
+        reason = fill.reason.strip() if fill.action == "sell" else ""
+        self.trade_rows.append(
+            _TradeLogRow(
+                date=fill.date.isoformat(),
+                action=fill.action,
+                symbol=fill.symbol,
+                qty=fill.qty,
+                price=fill.price,
+                fee=fill.fee,
+                reason=reason,
+            )
+        )
 
 
 class _StatusLlmAgent(TradingAgent):
@@ -432,17 +439,42 @@ def _render_charts(
         )
 
 
-def _log_dataframe(rows: list[_LogRow]):
-    return [
-        {
-            "date": r.date,
-            "action": r.action,
-            "symbol": r.symbol,
-            "size": r.size,
-            "reason": r.reason,
-        }
-        for r in rows
-    ]
+def _trade_log_dataframe(rows: list[_TradeLogRow]) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    for r in rows:
+        notional = r.qty * r.price
+        reason = r.reason if r.action == "sell" else (r.reason or "—")
+        out.append(
+            {
+                "date": r.date,
+                "action": r.action,
+                "symbol": r.symbol,
+                "qty": r.qty,
+                "price": round(r.price, 2),
+                "notional": round(notional, 2),
+                "fee": round(r.fee, 2),
+                "reason": reason,
+            }
+        )
+    return out
+
+
+def _trade_rows_from_fills(fills: list[Fill]) -> list[_TradeLogRow]:
+    rows: list[_TradeLogRow] = []
+    for fill in fills:
+        reason = fill.reason.strip() if fill.action == "sell" else ""
+        rows.append(
+            _TradeLogRow(
+                date=fill.date.isoformat(),
+                action=fill.action,
+                symbol=fill.symbol,
+                qty=fill.qty,
+                price=fill.price,
+                fee=fill.fee,
+                reason=reason,
+            )
+        )
+    return rows
 
 
 def _equity_csv(result: SimResult) -> str:
@@ -574,8 +606,14 @@ def main() -> None:
             status_box.info(f"In progress — {detail}")
 
             with log_box.container():
-                st.subheader("Decision log")
-                st.dataframe(_log_dataframe(live.log_rows), width="stretch")
+                st.subheader("Trade log")
+                if live.trade_rows:
+                    st.dataframe(
+                        _trade_log_dataframe(live.trade_rows),
+                        width="stretch",
+                    )
+                else:
+                    st.caption("No fills yet — trades appear here after next-open execution.")
 
             if _should_redraw(event, live.day_index, total_days):
                 _render_charts(
@@ -643,23 +681,14 @@ def main() -> None:
         ohlc_final = live.ohlc
         avg_final = live.avg_costs
         buys_final, sells_final = live.buys, live.sells
-        log_rows = live.log_rows
+        trade_rows = live.trade_rows
     else:
         dates_s = [d.isoformat() for d in curve_dates]
         closes = [closes_map[d] for d in curve_dates]
         ohlc_final = ohlc
         avg_final = avg_costs
         buys_final, sells_final = buys, sells
-        log_rows = [
-            _LogRow(
-                date=d.date.isoformat(),
-                action=d.applied.action,
-                symbol=d.applied.symbol or "",
-                size=d.applied.size,
-                reason=d.applied.reason,
-            )
-            for d in result.decisions
-        ]
+        trade_rows = _trade_rows_from_fills(result.fills)
 
     _render_charts(
         equity_box=equity_box,
@@ -678,8 +707,11 @@ def main() -> None:
     )
 
     with log_box.container():
-        st.subheader("Decision log")
-        st.dataframe(_log_dataframe(log_rows), width="stretch")
+        st.subheader("Trade log")
+        if trade_rows:
+            st.dataframe(_trade_log_dataframe(trade_rows), width="stretch")
+        else:
+            st.caption("No fills in this run.")
 
     with download_box.container():
         d1, d2 = st.columns(2)
