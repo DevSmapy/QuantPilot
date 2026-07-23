@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import cast
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -23,40 +24,53 @@ DEFAULT_LOOKBACK = 60
 
 
 @dataclass
+class _TradeMarker:
+    day: str
+    equity: float
+    price: float
+    text: str
+    symbol: str
+
+
+@dataclass
 class _LiveChartState:
-    """Growing equity / trade series while a session runs."""
+    """Growing equity / price / trade series while a session runs."""
 
     dates: list[str] = field(default_factory=list)
     equities: list[float] = field(default_factory=list)
-    buy_dates: list[str] = field(default_factory=list)
-    buy_equities: list[float] = field(default_factory=list)
-    buy_text: list[str] = field(default_factory=list)
-    sell_dates: list[str] = field(default_factory=list)
-    sell_equities: list[float] = field(default_factory=list)
-    sell_text: list[str] = field(default_factory=list)
+    closes: list[float] = field(default_factory=list)
+    buys: list[_TradeMarker] = field(default_factory=list)
+    sells: list[_TradeMarker] = field(default_factory=list)
     day_index: int = 0
 
-    def observe(self, event: ProgressEvent) -> None:
+    def observe(
+        self,
+        event: ProgressEvent,
+        *,
+        close_price: float,
+    ) -> None:
         if event.discarded_pending:
             return
         self.day_index += 1
         day = event.date.isoformat()
         self.dates.append(day)
         self.equities.append(event.equity)
+        self.closes.append(close_price)
         if event.fill is not None:
             self._record_fill(event.fill, event.equity)
 
     def _record_fill(self, fill: Fill, equity: float) -> None:
-        day = fill.date.isoformat()
-        label = f"{fill.symbol} {fill.qty}@{fill.price:.2f}"
+        marker = _TradeMarker(
+            day=fill.date.isoformat(),
+            equity=equity,
+            price=fill.price,
+            text=f"{fill.symbol} {fill.qty}@{fill.price:.2f}",
+            symbol=fill.symbol,
+        )
         if fill.action == "buy":
-            self.buy_dates.append(day)
-            self.buy_equities.append(equity)
-            self.buy_text.append(label)
+            self.buys.append(marker)
         elif fill.action == "sell":
-            self.sell_dates.append(day)
-            self.sell_equities.append(equity)
-            self.sell_text.append(label)
+            self.sells.append(marker)
 
 
 def _parse_symbols(raw: str) -> list[str]:
@@ -80,77 +94,128 @@ def _load_markets(
     }
 
 
-def _build_figure(
+def _session_close(market: HistoricalMarket, on: date) -> float:
+    return float(cast(float, market.bar(on)["close"]))
+
+
+def _add_trade_markers(
+    fig: go.Figure,
+    *,
+    buys: list[_TradeMarker],
+    sells: list[_TradeMarker],
+    y_attr: str,
+    symbol_filter: str | None = None,
+) -> None:
+    buy_pts = [m for m in buys if symbol_filter is None or m.symbol == symbol_filter]
+    sell_pts = [m for m in sells if symbol_filter is None or m.symbol == symbol_filter]
+    if buy_pts:
+        fig.add_trace(
+            go.Scatter(
+                x=[m.day for m in buy_pts],
+                y=[getattr(m, y_attr) for m in buy_pts],
+                mode="markers",
+                name="Buy",
+                marker={"symbol": "triangle-up", "size": 11, "color": "green"},
+                text=[m.text for m in buy_pts],
+                hovertemplate="%{text}<extra></extra>",
+            )
+        )
+    if sell_pts:
+        fig.add_trace(
+            go.Scatter(
+                x=[m.day for m in sell_pts],
+                y=[getattr(m, y_attr) for m in sell_pts],
+                mode="markers",
+                name="Sell",
+                marker={"symbol": "triangle-down", "size": 11, "color": "red"},
+                text=[m.text for m in sell_pts],
+                hovertemplate="%{text}<extra></extra>",
+            )
+        )
+
+
+def _build_equity_figure(
     *,
     dates: list[str],
     equities: list[float],
-    buy_dates: list[str] | None = None,
-    buy_equities: list[float] | None = None,
-    buy_text: list[str] | None = None,
-    sell_dates: list[str] | None = None,
-    sell_equities: list[float] | None = None,
-    sell_text: list[str] | None = None,
+    buys: list[_TradeMarker],
+    sells: list[_TradeMarker],
     buy_and_hold_equity: float | None = None,
-    title: str = "Equity and trade markers",
+    title: str = "Portfolio equity",
 ) -> go.Figure:
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=dates, y=equities, mode="lines", name="Agent equity"))
-
     if buy_and_hold_equity is not None and dates:
         fig.add_hline(
             y=buy_and_hold_equity,
             line_dash="dash",
             annotation_text="Buy&Hold final",
         )
-
-    if buy_dates and buy_equities:
-        fig.add_trace(
-            go.Scatter(
-                x=buy_dates,
-                y=buy_equities,
-                mode="markers",
-                name="Buy",
-                marker={"symbol": "triangle-up", "size": 10, "color": "green"},
-                text=buy_text or None,
-                hovertemplate="%{text}<extra></extra>",
-            )
-        )
-    if sell_dates and sell_equities:
-        fig.add_trace(
-            go.Scatter(
-                x=sell_dates,
-                y=sell_equities,
-                mode="markers",
-                name="Sell",
-                marker={"symbol": "triangle-down", "size": 10, "color": "red"},
-                text=sell_text or None,
-                hovertemplate="%{text}<extra></extra>",
-            )
-        )
+    _add_trade_markers(fig, buys=buys, sells=sells, y_attr="equity")
     fig.update_layout(
         title=title,
         xaxis_title="Date",
         yaxis_title="Equity",
         hovermode="x unified",
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
     )
     return fig
 
 
-def _figure_from_result(result: SimResult) -> go.Figure:
-    equity_by_date = {p.date: p.equity for p in result.equity_curve}
-    buys = [f for f in result.fills if f.action == "buy"]
-    sells = [f for f in result.fills if f.action == "sell"]
-    return _build_figure(
-        dates=[p.date.isoformat() for p in result.equity_curve],
-        equities=[p.equity for p in result.equity_curve],
-        buy_dates=[f.date.isoformat() for f in buys],
-        buy_equities=[equity_by_date.get(f.date, result.final_equity) for f in buys],
-        buy_text=[f"{f.symbol} {f.qty}@{f.price:.2f}" for f in buys],
-        sell_dates=[f.date.isoformat() for f in sells],
-        sell_equities=[equity_by_date.get(f.date, result.final_equity) for f in sells],
-        sell_text=[f"{f.symbol} {f.qty}@{f.price:.2f}" for f in sells],
-        buy_and_hold_equity=result.buy_and_hold_equity,
+def _build_price_figure(
+    *,
+    dates: list[str],
+    closes: list[float],
+    buys: list[_TradeMarker],
+    sells: list[_TradeMarker],
+    price_symbol: str,
+    title: str | None = None,
+) -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(x=dates, y=closes, mode="lines", name=f"{price_symbol} close")
     )
+    _add_trade_markers(
+        fig,
+        buys=buys,
+        sells=sells,
+        y_attr="price",
+        symbol_filter=price_symbol,
+    )
+    fig.update_layout(
+        title=title or f"Price — {price_symbol}",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        hovermode="x unified",
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
+    )
+    return fig
+
+
+def _markers_from_result(result: SimResult) -> tuple[list[_TradeMarker], list[_TradeMarker]]:
+    equity_by_date = {p.date: p.equity for p in result.equity_curve}
+    buys: list[_TradeMarker] = []
+    sells: list[_TradeMarker] = []
+    for fill in result.fills:
+        marker = _TradeMarker(
+            day=fill.date.isoformat(),
+            equity=equity_by_date.get(fill.date, result.final_equity),
+            price=fill.price,
+            text=f"{fill.symbol} {fill.qty}@{fill.price:.2f}",
+            symbol=fill.symbol,
+        )
+        if fill.action == "buy":
+            buys.append(marker)
+        elif fill.action == "sell":
+            sells.append(marker)
+    return buys, sells
+
+
+def _closes_for_dates(
+    market: HistoricalMarket,
+    dates: list[date],
+) -> list[float]:
+    return [_session_close(market, on) for on in dates]
 
 
 def _should_redraw(event: ProgressEvent, day_index: int, total_days: int) -> bool:
@@ -160,6 +225,51 @@ def _should_redraw(event: ProgressEvent, day_index: int, total_days: int) -> boo
     if day_index == 1 or day_index >= total_days:
         return True
     return day_index % 5 == 0
+
+
+def _render_charts(
+    *,
+    equity_box: object,
+    price_box: object,
+    dates: list[str],
+    equities: list[float],
+    closes: list[float],
+    buys: list[_TradeMarker],
+    sells: list[_TradeMarker],
+    price_symbol: str,
+    buy_and_hold_equity: float | None = None,
+    live: bool = False,
+    as_of: date | None = None,
+) -> None:
+    equity_title = "Portfolio equity"
+    price_title = f"Price — {price_symbol}"
+    if live and as_of is not None:
+        equity_title = f"Portfolio equity (live) — {as_of}"
+        price_title = f"Price — {price_symbol} (live) — {as_of}"
+    with equity_box.container():
+        st.plotly_chart(
+            _build_equity_figure(
+                dates=dates,
+                equities=equities,
+                buys=buys,
+                sells=sells,
+                buy_and_hold_equity=buy_and_hold_equity,
+                title=equity_title,
+            ),
+            width="stretch",
+        )
+    with price_box.container():
+        st.plotly_chart(
+            _build_price_figure(
+                dates=dates,
+                closes=closes,
+                buys=buys,
+                sells=sells,
+                price_symbol=price_symbol,
+                title=price_title,
+            ),
+            width="stretch",
+        )
 
 
 def main() -> None:
@@ -188,7 +298,8 @@ def main() -> None:
     status_box = st.empty()
     progress_bar = st.progress(0.0, text="Starting simulation…")
     metrics_box = st.empty()
-    chart_box = st.empty()
+    equity_box = st.empty()
+    price_box = st.empty()
     caption_box = st.empty()
 
     try:
@@ -208,6 +319,9 @@ def main() -> None:
             st.error("No overlapping trading sessions in the window.")
             return
 
+        price_symbol = symbols[0]
+        price_market = markets[price_symbol]
+
         agent: HoldAgent | LlmTradingAgent
         if hold_only:
             agent = HoldAgent()
@@ -218,7 +332,8 @@ def main() -> None:
         total_days = len(sessions)
 
         def on_progress(event: ProgressEvent) -> None:
-            live.observe(event)
+            close_px = _session_close(price_market, event.date)
+            live.observe(event, close_price=close_px)
             if event.discarded_pending:
                 status_box.warning("Last-day pending order discarded (no next open).")
                 return
@@ -239,19 +354,17 @@ def main() -> None:
             status_box.info(f"In progress — {detail}")
 
             if _should_redraw(event, live.day_index, total_days):
-                chart_box.plotly_chart(
-                    _build_figure(
-                        dates=live.dates,
-                        equities=live.equities,
-                        buy_dates=live.buy_dates,
-                        buy_equities=live.buy_equities,
-                        buy_text=live.buy_text,
-                        sell_dates=live.sell_dates,
-                        sell_equities=live.sell_equities,
-                        sell_text=live.sell_text,
-                        title=f"Equity (live) — {event.date}",
-                    ),
-                    width="stretch",
+                _render_charts(
+                    equity_box=equity_box,
+                    price_box=price_box,
+                    dates=live.dates,
+                    equities=live.equities,
+                    closes=live.closes,
+                    buys=live.buys,
+                    sells=live.sells,
+                    price_symbol=price_symbol,
+                    live=True,
+                    as_of=event.date,
                 )
 
         result = SimulationSession(
@@ -288,11 +401,27 @@ def main() -> None:
         bah = result.buy_and_hold_equity
         c5.metric("Buy&Hold", f"{bah:,.0f}" if bah is not None else "n/a")
 
-    chart_box.plotly_chart(_figure_from_result(result), width="stretch")
+    buys, sells = _markers_from_result(result)
+    curve_dates = [p.date for p in result.equity_curve]
+    _render_charts(
+        equity_box=equity_box,
+        price_box=price_box,
+        dates=[d.isoformat() for d in curve_dates],
+        equities=[p.equity for p in result.equity_curve],
+        closes=_closes_for_dates(price_market, curve_dates),
+        buys=buys,
+        sells=sells,
+        price_symbol=price_symbol,
+        buy_and_hold_equity=result.buy_and_hold_equity,
+    )
+    note = ""
+    if len(result.symbols) > 1:
+        note = f" Price panel shows {price_symbol} (first symbol); markers there are for that ticker only."
     caption_box.caption(
         f"Symbols: {', '.join(result.symbols)} | "
         f"{result.start} ~ {result.end} | "
-        f"fills={len(result.fills)} decisions={len(result.decisions)}"
+        f"fills={len(result.fills)} decisions={len(result.decisions)}."
+        f"{note}"
     )
 
 
