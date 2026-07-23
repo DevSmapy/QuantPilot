@@ -12,10 +12,55 @@ from quantpilot.agent.decision import TradeDecision
 from quantpilot.agent.hold import HoldAgent
 from quantpilot.agent.llm import LlmTradingAgent
 from quantpilot.environment.market import HistoricalMarket
-from quantpilot.environment.observation import AgentObservation
+from quantpilot.environment.observation import AgentObservation, SymbolView
 from quantpilot.environment.types import PortfolioSnapshot
 from quantpilot.simulation.benchmark import buy_and_hold_final_equity
 from quantpilot.simulation.session import SimulationSession
+
+
+def _obs(
+    *,
+    cash: float,
+    holdings: dict[str, int] | None = None,
+    equity: float | None = None,
+) -> AgentObservation:
+    holdings = holdings or {}
+    mark = {symbol: 101.0 for symbol in holdings} or {"TEST.KS": 101.0}
+    avg = {symbol: 100.0 for symbol in holdings}
+    stock = sum(holdings.get(s, 0) * mark[s] for s in mark)
+    return AgentObservation(
+        as_of=date(2024, 1, 2),
+        symbols=["TEST.KS"],
+        legs=[
+            SymbolView(
+                symbol="TEST.KS",
+                recent_bars=[
+                    {
+                        "date": "2024-01-02",
+                        "open": 100.0,
+                        "close": 101.0,
+                        "volume": 1.0,
+                    }
+                ],
+                sma_20=100.0,
+                sma_60=None,
+                rsi_14=50.0,
+            )
+        ],
+        portfolio=PortfolioSnapshot(
+            cash=cash,
+            holdings=holdings,
+            mark_prices=mark,
+            avg_costs=avg,
+            equity=cash + stock if equity is None else equity,
+            unrealized_pnl=10.0 if holdings else 0.0,
+        ),
+        capital=1000.0,
+        target=1200.0,
+        remaining_sessions=5,
+        session_index=0,
+        session_count=6,
+    )
 
 
 class ScriptedAgent(TradingAgent):
@@ -59,9 +104,9 @@ def test_hold_agent_session_preserves_cash(sample_prices: pl.DataFrame) -> None:
     market = HistoricalMarket(sample_prices)
     start, end = date(2023, 1, 10), date(2023, 2, 10)
     session = SimulationSession(
-        market=market,
+        markets=market,
         agent=HoldAgent(),
-        symbol="TEST.KS",
+        symbols="TEST.KS",
         capital=1_000_000.0,
         target=1_100_000.0,
         decision_every=5,
@@ -86,9 +131,9 @@ def test_scripted_buy_sell_cashizes_and_records_fills(
         ]
     )
     session = SimulationSession(
-        market=market,
+        markets=market,
         agent=agent,
-        symbol="TEST.KS",
+        symbols="TEST.KS",
         capital=10_000.0,
         target=12_000.0,
         decision_every=1,
@@ -114,9 +159,9 @@ def test_last_day_decision_pending_is_discarded(
         [TradeDecision(action="buy", size=1.0, reason="enter")]
     )
     session = SimulationSession(
-        market=market,
+        markets=market,
         agent=agent,
-        symbol="TEST.KS",
+        symbols="TEST.KS",
         capital=10_000.0,
         target=12_000.0,
         decision_every=1,
@@ -138,9 +183,9 @@ def test_decision_every_controls_call_count(
 
     daily = ScriptedAgent([TradeDecision.hold()])
     SimulationSession(
-        market=market,
+        markets=market,
         agent=daily,
-        symbol="TEST.KS",
+        symbols="TEST.KS",
         capital=10_000.0,
         target=12_000.0,
         decision_every=1,
@@ -149,9 +194,9 @@ def test_decision_every_controls_call_count(
 
     weekly = ScriptedAgent([TradeDecision.hold()])
     SimulationSession(
-        market=market,
+        markets=market,
         agent=weekly,
-        symbol="TEST.KS",
+        symbols="TEST.KS",
         capital=10_000.0,
         target=12_000.0,
         decision_every=5,
@@ -169,9 +214,9 @@ def test_invalid_queue_demotes_decision_record(
         [TradeDecision(action="sell", size=1.0, reason="no shares yet")]
     )
     result = SimulationSession(
-        market=market,
+        markets=market,
         agent=agent,
-        symbol="TEST.KS",
+        symbols="TEST.KS",
         capital=10_000.0,
         target=12_000.0,
         decision_every=1,
@@ -198,9 +243,9 @@ def test_observation_never_sees_future(sample_prices: pl.DataFrame) -> None:
 
     start, end = date(2023, 2, 1), date(2023, 2, 28)
     SimulationSession(
-        market=market,
+        markets=market,
         agent=CaptureAgent(),
-        symbol="TEST.KS",
+        symbols="TEST.KS",
         capital=10_000.0,
         target=12_000.0,
         decision_every=5,
@@ -212,30 +257,7 @@ def test_observation_never_sees_future(sample_prices: pl.DataFrame) -> None:
 def test_llm_agent_sell_without_reason_falls_back_to_hold() -> None:
     llm = FakeLLM(['{"action":"sell","size":1.0,"reason":""}'])
     agent = LlmTradingAgent(llm, max_retries=0)
-    obs = AgentObservation(
-        as_of=date(2024, 1, 2),
-        symbol="TEST.KS",
-        recent_bars=[
-            {"date": "2024-01-02", "open": 100.0, "close": 101.0, "volume": 1.0}
-        ],
-        sma_20=100.0,
-        sma_60=None,
-        rsi_14=50.0,
-        portfolio=PortfolioSnapshot(
-            cash=0.0,
-            qty=10,
-            avg_cost=100.0,
-            last_price=101.0,
-            equity=1010.0,
-            unrealized_pnl=10.0,
-        ),
-        capital=1000.0,
-        target=1200.0,
-        remaining_sessions=5,
-        session_index=0,
-        session_count=6,
-    )
-    decision = agent.decide(obs)
+    decision = agent.decide(_obs(cash=0.0, holdings={"TEST.KS": 10}, equity=1010.0))
     assert decision.action == "hold"
     assert llm.calls == 1
 
@@ -243,30 +265,7 @@ def test_llm_agent_sell_without_reason_falls_back_to_hold() -> None:
 def test_llm_agent_connection_error_holds() -> None:
     llm = FakeLLM([], fail=True)
     agent = LlmTradingAgent(llm, max_retries=0)
-    obs = AgentObservation(
-        as_of=date(2024, 1, 2),
-        symbol="TEST.KS",
-        recent_bars=[
-            {"date": "2024-01-02", "open": 100.0, "close": 101.0, "volume": 1.0}
-        ],
-        sma_20=100.0,
-        sma_60=None,
-        rsi_14=50.0,
-        portfolio=PortfolioSnapshot(
-            cash=1000.0,
-            qty=0,
-            avg_cost=0.0,
-            last_price=101.0,
-            equity=1000.0,
-            unrealized_pnl=0.0,
-        ),
-        capital=1000.0,
-        target=1200.0,
-        remaining_sessions=5,
-        session_index=0,
-        session_count=6,
-    )
-    decision = agent.decide(obs)
+    decision = agent.decide(_obs(cash=1000.0))
     assert decision.action == "hold"
     assert decision.reason == "llm_unavailable"
 
@@ -279,30 +278,7 @@ def test_llm_agent_retries_then_succeeds() -> None:
         ]
     )
     agent = LlmTradingAgent(llm, max_retries=1, options={"seed": 7, "temperature": 0.2})
-    obs = AgentObservation(
-        as_of=date(2024, 1, 2),
-        symbol="TEST.KS",
-        recent_bars=[
-            {"date": "2024-01-02", "open": 100.0, "close": 101.0, "volume": 1.0}
-        ],
-        sma_20=100.0,
-        sma_60=None,
-        rsi_14=50.0,
-        portfolio=PortfolioSnapshot(
-            cash=1000.0,
-            qty=0,
-            avg_cost=0.0,
-            last_price=101.0,
-            equity=1000.0,
-            unrealized_pnl=0.0,
-        ),
-        capital=1000.0,
-        target=1200.0,
-        remaining_sessions=5,
-        session_index=0,
-        session_count=6,
-    )
-    decision = agent.decide(obs)
+    decision = agent.decide(_obs(cash=1000.0))
     assert decision.action == "buy"
     assert decision.size == 0.25
     assert llm.calls == 2
@@ -320,3 +296,34 @@ def test_buy_and_hold_benchmark(sample_prices: pl.DataFrame) -> None:
     qty = int(10_000.0 // first_open)
     expected = (10_000.0 - qty * first_open) + qty * last_close
     assert equity == expected
+
+
+def test_multi_symbol_session_intersection_and_symbol_required(
+    sample_prices: pl.DataFrame,
+) -> None:
+    other = sample_prices.with_columns((pl.col("close") * 0.5).alias("close"))
+    markets = {
+        "A.KS": HistoricalMarket(sample_prices),
+        "B.KS": HistoricalMarket(other),
+    }
+    start, end = date(2023, 1, 1), date(2023, 1, 10)
+    agent = ScriptedAgent(
+        [
+            TradeDecision(action="buy", size=1.0, reason="enter", symbol="B.KS"),
+            TradeDecision(action="sell", size=1.0, reason="exit"),  # missing symbol
+            TradeDecision.hold(),
+        ]
+    )
+    result = SimulationSession(
+        markets=markets,
+        agent=agent,
+        symbols=["A.KS", "B.KS"],
+        capital=10_000.0,
+        target=12_000.0,
+        decision_every=1,
+    ).run(start, end)
+    assert any(f.symbol == "B.KS" and f.action == "buy" for f in result.fills)
+    demoted = [d for d in result.decisions if d.requested.action == "sell"]
+    assert demoted
+    assert demoted[0].applied.action == "hold"
+    assert demoted[0].applied.reason == "symbol_required"

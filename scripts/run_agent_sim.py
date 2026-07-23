@@ -8,7 +8,9 @@ from datetime import date, timedelta
 
 from quantpilot.agent.hold import HoldAgent
 from quantpilot.agent.llm import LlmTradingAgent
-from quantpilot.environment.market import HistoricalMarket
+from quantpilot.console import configure_stdio
+from quantpilot.environment.costs import TradingCosts
+from quantpilot.environment.market import HistoricalMarket, intersect_session_dates
 from quantpilot.factory import create_datasource_manager, create_ollama_provider
 from quantpilot.simulation.result import SimResult
 from quantpilot.simulation.session import ProgressEvent, SimulationSession
@@ -21,6 +23,11 @@ def parse_args() -> argparse.Namespace:
         description="QuantPilot agent paper-trading simulation",
     )
     parser.add_argument("--symbol", default="005930.KS", help="Ticker symbol")
+    parser.add_argument(
+        "--symbols",
+        default=None,
+        help="Comma-separated tickers (overrides --symbol)",
+    )
     parser.add_argument(
         "--start",
         type=date.fromisoformat,
@@ -85,21 +92,52 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_LOOKBACK_SESSIONS,
         help="Required trading days of history before start for indicators",
     )
+    parser.add_argument(
+        "--commission-rate",
+        type=float,
+        default=0.0,
+        help="Commission as a fraction of notional (e.g. 0.00015)",
+    )
+    parser.add_argument(
+        "--slippage-bps",
+        type=float,
+        default=0.0,
+        help="Slippage in basis points applied to the open",
+    )
     return parser.parse_args()
 
 
+def _parse_symbols(args: argparse.Namespace) -> list[str]:
+    if args.symbols:
+        symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+        if not symbols:
+            raise SystemExit("--symbols must list at least one ticker")
+        return symbols
+    return [args.symbol]
+
+
 def _progress(event: ProgressEvent) -> None:
-    parts = [f"[{event.date}] cash={event.cash:,.0f} equity={event.equity:,.0f} qty={event.qty}"]
+    holdings = (
+        ",".join(f"{s}:{q}" for s, q in sorted(event.holdings.items())) or "(none)"
+    )
+    parts = [
+        f"[{event.date}] cash={event.cash:,.0f} equity={event.equity:,.0f} "
+        f"total_shares={event.qty} holdings={holdings}"
+    ]
+    if event.equity_after_fill is not None:
+        parts.append(f"equity_after_fill={event.equity_after_fill:,.0f}")
     if event.fill is not None:
         parts.append(
-            f"fill={event.fill.action}:{event.fill.qty}@{event.fill.price:.2f}"
+            f"fill={event.fill.symbol}:{event.fill.action}:"
+            f"{event.fill.qty}@{event.fill.price:.2f}"
         )
     if event.fill_rejected:
         parts.append(f"fill_rejected={event.fill_rejected}")
     if event.decision is not None:
+        sym = event.decision.symbol or ""
         parts.append(
-            f"action={event.decision.action} size={event.decision.size:.2f} "
-            f"reason={event.decision.reason!r}"
+            f"action={event.decision.action} symbol={sym} "
+            f"size={event.decision.size:.2f} reason={event.decision.reason!r}"
         )
     if event.discarded_pending:
         parts.append("discarded_pending=True")
@@ -107,17 +145,19 @@ def _progress(event: ProgressEvent) -> None:
         print(" ".join(parts))
 
 
-def _load_market(
-    symbol: str,
+def _load_markets(
+    symbols: list[str],
     start: date,
     end: date,
     lookback_sessions: int,
-) -> HistoricalMarket:
-    # Calendar buffer so we have enough trading days before start.
+) -> dict[str, HistoricalMarket]:
     load_start = start - timedelta(days=max(lookback_sessions * 3, 90))
     manager = create_datasource_manager()
-    prices = manager.get_price(symbol, load_start, end)
-    return HistoricalMarket(prices)
+    markets: dict[str, HistoricalMarket] = {}
+    for symbol in symbols:
+        prices = manager.get_price(symbol, load_start, end)
+        markets[symbol] = HistoricalMarket(prices)
+    return markets
 
 
 def _make_agent(
@@ -140,14 +180,17 @@ def _print_result(result: SimResult, run_idx: int, runs: int) -> None:
     prefix = f"Run {run_idx}/{runs}" if runs > 1 else "Result"
     print("\n" + prefix)
     print("-" * 60)
+    print(f"Symbols      : {', '.join(result.symbols)}")
     print(f"Period       : {result.start} ~ {result.end}")
     print(f"Final equity : {result.final_equity:,.0f}")
     print(f"Target       : {result.target:,.0f} (hit={result.hit_target})")
     print(f"Total return : {result.total_return:+.2%}")
+    print(f"Total fees   : {result.total_fees:,.0f}")
     if result.buy_and_hold_equity is not None:
         bah_ret = (result.buy_and_hold_equity / result.capital) - 1.0
         print(
-            f"Buy&Hold     : {result.buy_and_hold_equity:,.0f} ({bah_ret:+.2%})"
+            f"Buy&Hold     : {result.buy_and_hold_equity:,.0f} ({bah_ret:+.2%}) "
+            f"[same costs as agent]"
         )
     print(f"Decisions    : {len(result.decisions)}")
     print(f"Fills        : {len(result.fills)}")
@@ -156,11 +199,13 @@ def _print_result(result: SimResult, run_idx: int, runs: int) -> None:
     if result.discarded_pending is not None:
         print(
             f"Discarded    : {result.discarded_pending.action} "
+            f"symbol={result.discarded_pending.symbol} "
             f"size={result.discarded_pending.size}"
         )
 
 
 def main() -> None:
+    configure_stdio()
     args = parse_args()
     if args.period_days < 1:
         raise SystemExit("--period-days must be >= 1")
@@ -170,43 +215,55 @@ def main() -> None:
         raise SystemExit("--runs must be >= 1")
     if args.lookback_sessions < 1:
         raise SystemExit("--lookback-sessions must be >= 1")
+    if args.commission_rate < 0:
+        raise SystemExit("--commission-rate must be >= 0")
+    if args.commission_rate >= 1.0:
+        raise SystemExit("--commission-rate must be < 1")
+    if args.slippage_bps < 0:
+        raise SystemExit("--slippage-bps must be >= 0")
 
+    symbols = _parse_symbols(args)
     end = args.start + timedelta(days=args.period_days)
+    label = ",".join(symbols)
     print(
-        f"QuantPilot Agent Sim — {args.symbol} "
+        f"QuantPilot Agent Sim — {label} "
         f"({args.start} ~ {end}, calendar {args.period_days}d)"
     )
     print("=" * 60)
 
-    market = _load_market(
-        args.symbol, args.start, end, args.lookback_sessions
-    )
-    prior = market.prior_session_count(args.start)
-    if prior < args.lookback_sessions:
-        raise SystemExit(
-            f"Need at least {args.lookback_sessions} trading days before "
-            f"{args.start}, found {prior}. Choose a later --start or "
-            f"lower --lookback-sessions."
-        )
+    markets = _load_markets(symbols, args.start, end, args.lookback_sessions)
+    for symbol, market in markets.items():
+        prior = market.prior_session_count(args.start)
+        if prior < args.lookback_sessions:
+            raise SystemExit(
+                f"Need at least {args.lookback_sessions} trading days before "
+                f"{args.start} for {symbol}, found {prior}."
+            )
 
-    sessions = market.session_dates(args.start, end)
+    sessions = intersect_session_dates(markets, args.start, end)
+    priors = min(m.prior_session_count(args.start) for m in markets.values())
     print(f"Trading sessions in window: {len(sessions)}")
-    print(f"Lookback sessions before start: {prior}")
+    print(f"Lookback sessions before start: {priors}")
     if not sessions:
         raise SystemExit("No trading sessions in the requested window")
 
+    costs = TradingCosts(
+        commission_rate=args.commission_rate,
+        slippage_bps=args.slippage_bps,
+    )
     results: list[SimResult] = []
     for run_idx in range(1, args.runs + 1):
         if args.runs > 1:
             print(f"\n=== Run {run_idx}/{args.runs} ===")
         agent = _make_agent(args, run_idx=run_idx)
         session = SimulationSession(
-            market=market,
+            markets=markets,
             agent=agent,
-            symbol=args.symbol,
+            symbols=symbols,
             capital=args.capital,
             target=args.target,
             decision_every=args.decision_every,
+            costs=costs,
             on_progress=_progress,
         )
         result = session.run(args.start, end)

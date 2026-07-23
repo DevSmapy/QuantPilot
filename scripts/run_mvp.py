@@ -7,6 +7,7 @@ import argparse
 from datetime import date
 
 from quantpilot.backtest.engine import BacktestEngine
+from quantpilot.console import configure_stdio
 from quantpilot.factory import create_datasource_manager, create_ollama_provider
 from quantpilot.strategy.sma_cross import SMACrossStrategy
 
@@ -35,6 +36,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    configure_stdio()
     args = parse_args()
 
     print(f"QuantPilot MVP — {args.symbol} ({args.start} ~ {args.end})")
