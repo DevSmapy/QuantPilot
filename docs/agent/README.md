@@ -129,7 +129,12 @@ uv sync --group viz
 uv run streamlit run scripts/streamlit_agent_sim.py
 ```
 
-사이드바에서 심볼·기간·비용·hold-only를 설정한 뒤 실행하면, 시뮬레이션이 진행되는 동안 **총자산(equity)** 과 그 아래 **주가(close)** 차트가 날짜 순으로 갱신되고 하단에 진행률이 표시됩니다. 매수/매도 마커는 두 차트에 모두 표시됩니다(주가 차트는 첫 종목 기준). 완료 후 Buy&Hold 최종선이 equity 차트에 확정됩니다.
+사이드바에서 심볼·주가 종목·차트 종류(Close line / Candlestick)·기간·비용·hold-only를 설정한 뒤 실행합니다.
+
+- 진행 중: equity·주가 차트 live 갱신, 진행률, 결정 로그 테이블. LLM 사용 시 결정 직전 `Waiting for Ollama…` 표시.
+- Equity: target·Buy&Hold(완료 시) 수평선, 매수/매도 마커.
+- 주가: 평균단가 점선(보유 구간만). Close line 모드 마커는 **close**에 맞춤(hover는 체결가). Candlestick 모드 마커는 **체결가**.
+- 완료 후 equity/fills CSV 다운로드.
 
 주요 플래그:
 
