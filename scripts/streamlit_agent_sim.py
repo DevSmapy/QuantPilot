@@ -94,7 +94,12 @@ class _LiveChartState:
         avg = event.avg_costs.get(price_symbol)
         self.avg_costs.append(avg if qty > 0 and avg is not None else None)
         if event.fill is not None:
-            self._record_fill(event.fill, event.equity, ohlc.close)
+            marker_equity = (
+                event.equity_after_fill
+                if event.equity_after_fill is not None
+                else event.equity
+            )
+            self._record_fill(event.fill, marker_equity, ohlc.close)
 
     def _record_fill(self, fill: Fill, equity: float, close_price: float) -> None:
         marker = _TradeMarker(
@@ -209,10 +214,18 @@ def _build_equity_figure(
     if target is not None and dates:
         fig.add_hline(y=target, line_dash="dash", annotation_text="Target")
     if buy_and_hold_equity is not None and dates:
-        fig.add_hline(
-            y=buy_and_hold_equity,
-            line_dash="dash",
-            annotation_text="Buy&Hold final",
+        # Final BAH equity only (not a daily path) — plotted at the last date.
+        fig.add_trace(
+            go.Scatter(
+                x=[dates[-1]],
+                y=[buy_and_hold_equity],
+                mode="markers+text",
+                name="Buy&Hold final",
+                marker={"symbol": "diamond", "size": 10, "color": "#555"},
+                text=["BAH final"],
+                textposition="top center",
+                hovertemplate="Buy&Hold final: %{y:,.0f}<extra></extra>",
+            )
         )
     if buys:
         fig.add_trace(
@@ -326,13 +339,18 @@ def _markers_from_result(
     *,
     closes_by_date: dict[date, float],
 ) -> tuple[list[_TradeMarker], list[_TradeMarker]]:
-    equity_by_date = {p.date: p.equity for p in result.equity_curve}
+    equity_eod = {p.date: p.equity for p in result.equity_curve}
+    equity_after_fill = {
+        p.date: p.equity_after_fill
+        for p in result.equity_curve
+        if p.equity_after_fill is not None
+    }
     buys: list[_TradeMarker] = []
     sells: list[_TradeMarker] = []
     for fill in result.fills:
         marker = _TradeMarker(
             day=fill.date.isoformat(),
-            equity=equity_by_date.get(fill.date, result.final_equity),
+            equity=equity_after_fill.get(fill.date, equity_eod.get(fill.date, result.final_equity)),
             exec_price=fill.price,
             close_price=closes_by_date.get(fill.date, fill.price),
             text=f"{fill.symbol} {fill.qty}@{fill.price:.2f}",
@@ -343,6 +361,29 @@ def _markers_from_result(
         elif fill.action == "sell":
             sells.append(marker)
     return buys, sells
+
+
+def _format_holdings(holdings: dict[str, int]) -> str:
+    if not holdings:
+        return ""
+    return ";".join(f"{symbol}:{qty}" for symbol, qty in sorted(holdings.items()))
+
+
+def _equity_csv(result: SimResult) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["date", "equity", "cash", "total_shares", "holdings"])
+    for p in result.equity_curve:
+        writer.writerow(
+            [
+                p.date.isoformat(),
+                p.equity,
+                p.cash,
+                p.qty,
+                _format_holdings(p.holdings),
+            ]
+        )
+    return buf.getvalue()
 
 
 def _avg_costs_from_result(
@@ -477,15 +518,6 @@ def _trade_rows_from_fills(fills: list[Fill]) -> list[_TradeLogRow]:
     return rows
 
 
-def _equity_csv(result: SimResult) -> str:
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["date", "equity", "cash", "qty"])
-    for p in result.equity_curve:
-        writer.writerow([p.date.isoformat(), p.equity, p.cash, p.qty])
-    return buf.getvalue()
-
-
 def _fills_csv(result: SimResult) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -505,41 +537,32 @@ def _fills_csv(result: SimResult) -> str:
     return buf.getvalue()
 
 
-def main() -> None:
-    configure_stdio()
-    st.set_page_config(page_title="QuantPilot Agent Sim", layout="wide")
-    st.title("QuantPilot Agent Simulation")
+@dataclass
+class _SimPayload:
+    """Persisted simulation output for Streamlit reruns."""
 
-    with st.sidebar:
-        symbols_raw = st.text_input("Symbols (comma-separated)", "005930.KS")
-        try:
-            parsed_symbols = _parse_symbols(symbols_raw)
-        except ValueError:
-            parsed_symbols = ["005930.KS"]
-        price_symbol = st.selectbox("Price chart symbol", parsed_symbols, index=0)
-        chart_type = st.selectbox(
-            "Price chart type",
-            ["Close line", "Candlestick"],
-            index=0,
-        )
-        start = st.date_input("Start", value=date(2024, 1, 2))
-        period_days = st.number_input("Period days", min_value=1, value=90)
-        capital = st.number_input("Capital", min_value=1.0, value=10_000_000.0, step=100_000.0)
-        target = st.number_input("Target", min_value=1.0, value=12_000_000.0, step=100_000.0)
-        decision_every = st.number_input("Decision every N sessions", min_value=1, value=5)
-        commission_rate = st.number_input(
-            "Commission rate", min_value=0.0, value=0.0, format="%.6f"
-        )
-        slippage_bps = st.number_input("Slippage bps", min_value=0.0, value=0.0)
-        hold_only = st.checkbox("Hold only (no LLM)", value=True)
-        run = st.button("Run simulation", type="primary")
+    result: SimResult
+    markets: dict[str, HistoricalMarket]
+    live: _LiveChartState
+    run_price_symbol: str
 
-    if not run:
-        st.info("Configure parameters and click Run simulation.")
-        return
+
+def _render_completed_run(
+    payload: _SimPayload,
+    *,
+    price_symbol: str,
+    chart_type: PriceChartType,
+) -> None:
+    result = payload.result
+    markets = payload.markets
+    live = payload.live
+    symbols = result.symbols
+    if price_symbol not in symbols:
+        price_symbol = symbols[0]
+    if price_symbol not in markets:
+        price_symbol = payload.run_price_symbol
 
     status_box = st.empty()
-    progress_bar = st.progress(0.0, text="Starting simulation…")
     metrics_box = st.empty()
     equity_box = st.empty()
     price_box = st.empty()
@@ -547,112 +570,6 @@ def main() -> None:
     download_box = st.empty()
     caption_box = st.empty()
 
-    try:
-        symbols = _parse_symbols(symbols_raw)
-        if price_symbol not in symbols:
-            price_symbol = symbols[0]
-        start_d = start if isinstance(start, date) else start
-        end = start_d + timedelta(days=int(period_days))
-        markets = _load_markets(symbols, start_d, end, DEFAULT_LOOKBACK)
-        for symbol, market in markets.items():
-            prior = market.prior_session_count(start_d)
-            if prior < DEFAULT_LOOKBACK:
-                st.error(
-                    f"Need {DEFAULT_LOOKBACK} lookback sessions for {symbol}, found {prior}."
-                )
-                return
-        sessions = intersect_session_dates(markets, start_d, end)
-        if not sessions:
-            st.error("No overlapping trading sessions in the window.")
-            return
-
-        price_market = markets[price_symbol]
-        chart_mode: PriceChartType = (
-            "Candlestick" if chart_type == "Candlestick" else "Close line"
-        )
-
-        if hold_only:
-            agent: TradingAgent = HoldAgent()
-        else:
-            agent = _StatusLlmAgent(
-                LlmTradingAgent(create_ollama_provider()),
-                status_box,
-            )
-
-        live = _LiveChartState()
-        total_days = len(sessions)
-        target_f = float(target)
-
-        def on_progress(event: ProgressEvent) -> None:
-            ohlc = _bar_ohlc(price_market, event.date)
-            live.observe(event, price_symbol=price_symbol, ohlc=ohlc)
-            if event.discarded_pending:
-                status_box.warning("Last-day pending order discarded (no next open).")
-                return
-
-            frac = live.day_index / total_days if total_days else 1.0
-            detail = f"{event.date} · equity={event.equity:,.0f} · cash={event.cash:,.0f}"
-            if event.fill is not None:
-                detail += (
-                    f" · fill={event.fill.symbol}:{event.fill.action}"
-                    f":{event.fill.qty}@{event.fill.price:.2f}"
-                )
-            if event.decision is not None:
-                detail += f" · action={event.decision.action}"
-            progress_bar.progress(
-                min(frac, 1.0),
-                text=f"Simulating {live.day_index}/{total_days}: {detail}",
-            )
-            status_box.info(f"In progress — {detail}")
-
-            with log_box.container():
-                st.subheader("Trade log")
-                if live.trade_rows:
-                    st.dataframe(
-                        _trade_log_dataframe(live.trade_rows),
-                        width="stretch",
-                    )
-                else:
-                    st.caption("No fills yet — trades appear here after next-open execution.")
-
-            if _should_redraw(event, live.day_index, total_days):
-                _render_charts(
-                    equity_box=equity_box,
-                    price_box=price_box,
-                    dates=live.dates,
-                    equities=live.equities,
-                    closes=live.closes,
-                    ohlc=live.ohlc,
-                    avg_costs=live.avg_costs,
-                    buys=live.buys,
-                    sells=live.sells,
-                    price_symbol=price_symbol,
-                    chart_type=chart_mode,
-                    target=target_f,
-                    live=True,
-                    as_of=event.date,
-                )
-
-        result = SimulationSession(
-            markets=markets,
-            agent=agent,
-            symbols=symbols,
-            capital=float(capital),
-            target=target_f,
-            decision_every=int(decision_every),
-            costs=TradingCosts(
-                commission_rate=float(commission_rate),
-                slippage_bps=float(slippage_bps),
-            ),
-            on_progress=on_progress,
-        ).run(start_d, end)
-    except Exception as exc:
-        progress_bar.empty()
-        status_box.empty()
-        st.exception(exc)
-        return
-
-    progress_bar.progress(1.0, text="Simulation complete")
     status_box.success(
         f"Done — {result.start} ~ {result.end} · "
         f"final equity={result.final_equity:,.0f}"
@@ -665,17 +582,17 @@ def main() -> None:
         c3.metric("Total fees", f"{result.total_fees:,.0f}")
         c4.metric("Hit target", str(result.hit_target))
         bah = result.buy_and_hold_equity
-        c5.metric("Buy&Hold", f"{bah:,.0f}" if bah is not None else "n/a")
+        c5.metric("Buy&Hold final", f"{bah:,.0f}" if bah is not None else "n/a")
 
+    price_market = markets[price_symbol]
     curve_dates = [p.date for p in result.equity_curve]
     ohlc = _ohlc_for_dates(price_market, curve_dates)
     closes_map = {d: _bar_ohlc(price_market, d).close for d in curve_dates}
     buys, sells = _markers_from_result(result, closes_by_date=closes_map)
-    avg_costs = live.avg_costs if live.avg_costs else _avg_costs_from_result(
-        result, price_symbol
-    )
-    # Prefer live OHLC/closes when lengths match
-    if len(live.dates) == len(result.equity_curve):
+    avg_costs = _avg_costs_from_result(result, price_symbol)
+
+    same_symbol = price_symbol == payload.run_price_symbol
+    if same_symbol and len(live.dates) == len(result.equity_curve):
         dates_s = live.dates
         closes = live.closes
         ohlc_final = live.ohlc
@@ -701,8 +618,8 @@ def main() -> None:
         buys=buys_final,
         sells=sells_final,
         price_symbol=price_symbol,
-        chart_type=chart_mode,
-        target=float(target),
+        chart_type=chart_type,
+        target=result.target,
         buy_and_hold_equity=result.buy_and_hold_equity,
     )
 
@@ -728,16 +645,201 @@ def main() -> None:
             mime="text/csv",
         )
 
-    note = ""
-    if chart_mode == "Close line":
+    if chart_type == "Close line":
         note = " Close-line markers sit on close; hover shows fill price."
     else:
-        note = " Candlestick markers use execution (fill) price."
+        note = (
+            " Candlestick markers use execution (fill) price;"
+            " with slippage they may sit outside the bar high/low."
+        )
+    last = result.equity_curve[-1] if result.equity_curve else None
+    holdings_note = (
+        f" | holdings={_format_holdings(last.holdings) or '(none)'}"
+        f" | total_shares={last.qty}"
+        if last is not None
+        else ""
+    )
     caption_box.caption(
         f"Symbols: {', '.join(result.symbols)} | price={price_symbol} | "
         f"{result.start} ~ {result.end} | "
         f"fills={len(result.fills)} decisions={len(result.decisions)}."
-        f"{note}"
+        f"{holdings_note}"
+        f"{note} Buy&Hold marker is final equity (same costs as agent), not a daily path."
+    )
+
+
+def main() -> None:
+    configure_stdio()
+    st.set_page_config(page_title="QuantPilot Agent Sim", layout="wide")
+    st.title("QuantPilot Agent Simulation")
+
+    if "sim_payload" not in st.session_state:
+        st.session_state.sim_payload = None
+
+    with st.sidebar:
+        symbols_raw = st.text_input("Symbols (comma-separated)", "005930.KS")
+        try:
+            parsed_symbols = _parse_symbols(symbols_raw)
+        except ValueError:
+            parsed_symbols = ["005930.KS"]
+        price_symbol = st.selectbox("Price chart symbol", parsed_symbols, index=0)
+        chart_type_raw = st.selectbox(
+            "Price chart type",
+            ["Close line", "Candlestick"],
+            index=0,
+        )
+        chart_mode: PriceChartType = (
+            "Candlestick" if chart_type_raw == "Candlestick" else "Close line"
+        )
+        start = st.date_input("Start", value=date(2024, 1, 2))
+        period_days = st.number_input("Period days", min_value=1, value=90)
+        capital = st.number_input("Capital", min_value=1.0, value=10_000_000.0, step=100_000.0)
+        target = st.number_input("Target", min_value=1.0, value=12_000_000.0, step=100_000.0)
+        decision_every = st.number_input("Decision every N sessions", min_value=1, value=5)
+        commission_rate = st.number_input(
+            "Commission rate",
+            min_value=0.0,
+            max_value=0.999999,
+            value=0.0,
+            format="%.6f",
+        )
+        slippage_bps = st.number_input("Slippage bps", min_value=0.0, value=0.0)
+        hold_only = st.checkbox("Hold only (no LLM)", value=True)
+        run = st.button("Run simulation", type="primary")
+
+    if run:
+        status_box = st.empty()
+        progress_bar = st.progress(0.0, text="Starting simulation…")
+        equity_box = st.empty()
+        price_box = st.empty()
+        log_box = st.empty()
+
+        try:
+            symbols = _parse_symbols(symbols_raw)
+            run_price_symbol = price_symbol if price_symbol in symbols else symbols[0]
+            start_d = start if isinstance(start, date) else start
+            end = start_d + timedelta(days=int(period_days))
+            markets = _load_markets(symbols, start_d, end, DEFAULT_LOOKBACK)
+            for symbol, market in markets.items():
+                prior = market.prior_session_count(start_d)
+                if prior < DEFAULT_LOOKBACK:
+                    st.error(
+                        f"Need {DEFAULT_LOOKBACK} lookback sessions for {symbol}, "
+                        f"found {prior}."
+                    )
+                    return
+            sessions = intersect_session_dates(markets, start_d, end)
+            if not sessions:
+                st.error("No overlapping trading sessions in the window.")
+                return
+
+            price_market = markets[run_price_symbol]
+            if hold_only:
+                agent: TradingAgent = HoldAgent()
+            else:
+                agent = _StatusLlmAgent(
+                    LlmTradingAgent(create_ollama_provider()),
+                    status_box,
+                )
+
+            live = _LiveChartState()
+            total_days = len(sessions)
+            target_f = float(target)
+
+            def on_progress(event: ProgressEvent) -> None:
+                ohlc = _bar_ohlc(price_market, event.date)
+                live.observe(event, price_symbol=run_price_symbol, ohlc=ohlc)
+                if event.discarded_pending:
+                    status_box.warning(
+                        "Last-day pending order discarded (no next open)."
+                    )
+                    return
+
+                frac = live.day_index / total_days if total_days else 1.0
+                holdings = _format_holdings(event.holdings) or "(none)"
+                detail = (
+                    f"{event.date} · equity={event.equity:,.0f} · "
+                    f"cash={event.cash:,.0f} · holdings={holdings}"
+                )
+                if event.fill is not None:
+                    detail += (
+                        f" · fill={event.fill.symbol}:{event.fill.action}"
+                        f":{event.fill.qty}@{event.fill.price:.2f}"
+                    )
+                if event.decision is not None:
+                    detail += f" · action={event.decision.action}"
+                progress_bar.progress(
+                    min(frac, 1.0),
+                    text=f"Simulating {live.day_index}/{total_days}: {detail}",
+                )
+                status_box.info(f"In progress — {detail}")
+
+                with log_box.container():
+                    st.subheader("Trade log")
+                    if live.trade_rows:
+                        st.dataframe(
+                            _trade_log_dataframe(live.trade_rows),
+                            width="stretch",
+                        )
+                    else:
+                        st.caption(
+                            "No fills yet — trades appear here after next-open execution."
+                        )
+
+                if _should_redraw(event, live.day_index, total_days):
+                    _render_charts(
+                        equity_box=equity_box,
+                        price_box=price_box,
+                        dates=live.dates,
+                        equities=live.equities,
+                        closes=live.closes,
+                        ohlc=live.ohlc,
+                        avg_costs=live.avg_costs,
+                        buys=live.buys,
+                        sells=live.sells,
+                        price_symbol=run_price_symbol,
+                        chart_type=chart_mode,
+                        target=target_f,
+                        live=True,
+                        as_of=event.date,
+                    )
+
+            result = SimulationSession(
+                markets=markets,
+                agent=agent,
+                symbols=symbols,
+                capital=float(capital),
+                target=target_f,
+                decision_every=int(decision_every),
+                costs=TradingCosts(
+                    commission_rate=float(commission_rate),
+                    slippage_bps=float(slippage_bps),
+                ),
+                on_progress=on_progress,
+            ).run(start_d, end)
+        except Exception as exc:
+            progress_bar.empty()
+            status_box.empty()
+            st.exception(exc)
+            return
+
+        progress_bar.progress(1.0, text="Simulation complete")
+        st.session_state.sim_payload = _SimPayload(
+            result=result,
+            markets=markets,
+            live=live,
+            run_price_symbol=run_price_symbol,
+        )
+
+    payload = st.session_state.sim_payload
+    if payload is None:
+        st.info("Configure parameters and click Run simulation.")
+        return
+
+    _render_completed_run(
+        payload,
+        price_symbol=price_symbol,
+        chart_type=chart_mode,
     )
 
 
