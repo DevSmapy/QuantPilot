@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import cast
 
@@ -40,6 +40,8 @@ class ProgressEvent:
     fill: Fill | None = None
     fill_rejected: str | None = None
     discarded_pending: bool = False
+    holdings: dict[str, int] = field(default_factory=dict)
+    avg_costs: dict[str, float] = field(default_factory=dict)
 
 
 ProgressCallback = Callable[[ProgressEvent], None]
@@ -202,6 +204,8 @@ class SimulationSession:
                         decision=applied,
                         fill=fill,
                         fill_rejected=fill_rejected,
+                        holdings=dict(snap.holdings),
+                        avg_costs=dict(snap.avg_costs),
                     )
                 )
 
@@ -218,6 +222,11 @@ class SimulationSession:
                     equity=last.equity,
                     qty=last.qty,
                     discarded_pending=True,
+                    holdings=dict(broker.holdings()),
+                    avg_costs={
+                        symbol: broker.avg_cost(symbol)
+                        for symbol in broker.holdings()
+                    },
                 )
             )
 
