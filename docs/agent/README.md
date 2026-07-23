@@ -129,7 +129,7 @@ uv sync --group viz
 uv run streamlit run scripts/streamlit_agent_sim.py
 ```
 
-사이드바에서 심볼·기간·비용·hold-only를 설정한 뒤 실행하면, 시뮬레이션이 진행되는 동안 equity 곡선이 날짜 순으로 갱신되고 하단에 진행률이 표시됩니다. 완료 후 buy/sell 마커와 Buy&Hold 최종선이 확정됩니다.
+사이드바에서 심볼·기간·비용·hold-only를 설정한 뒤 실행하면, 시뮬레이션이 진행되는 동안 **총자산(equity)** 과 그 아래 **주가(close)** 차트가 날짜 순으로 갱신되고 하단에 진행률이 표시됩니다. 매수/매도 마커는 두 차트에 모두 표시됩니다(주가 차트는 첫 종목 기준). 완료 후 Buy&Hold 최종선이 equity 차트에 확정됩니다.
 
 주요 플래그:
 
