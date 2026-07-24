@@ -1,0 +1,219 @@
+# Windows에서 QuantPilot 실행하기
+
+이 가이드는 **`main` 브랜치** 기준으로, Windows(PowerShell / Docker Desktop)에서 현재 사용 가능한 기능을 실행하는 방법을 정리합니다. Make가 없어도 따라 할 수 있습니다.
+
+시뮬레이션 규칙·패키지 구조는 [`docs/agent/README.md`](../agent/README.md)를 참고하세요.
+
+---
+
+## 전제
+
+| 항목 | 설명 |
+|------|------|
+| OS | Windows 10/11, PowerShell 5+ 또는 PowerShell 7 |
+| Python | 3.12 (호스트 `uv` 경로를 쓸 때) |
+| 패키지 관리 | [uv](https://docs.astral.sh/uv/) |
+| 데이터 | Q-SEED `data/` 디렉터리 (아래 레이아웃) |
+| Docker | [Docker Desktop](https://www.docker.com/products/docker-desktop/) (경로 A, 선택) |
+| Ollama | LLM MVP 리뷰·에이전트에 필요. Hold-only / `--skip-ai`에는 불필요 |
+
+Q-SEED data 레이아웃 예시:
+
+```text
+D:\path\to\Q-SEED\data\
+├── stocks_0001.parquet
+├── stocks_*.parquet
+└── data_log\
+```
+
+---
+
+## `main`에서 사용 가능한 기능
+
+| 기능 | 진입점 | 비고 |
+|------|--------|------|
+| MVP 데모 (전략 → 백테스트, AI 선택) | `scripts/run_mvp.py` | `--skip-ai`로 Ollama 없이 실행 가능 |
+| 에이전트 시뮬레이션 (단일 종목 CLI) | `scripts/run_agent_sim.py` | Hold / Ollama LLM |
+| 단위 테스트·린트 | `pytest` / `ruff` / `black` / `mypy` | |
+
+**아직 `main`에 없음:** Streamlit UI, 다종목 유니버스, 수수료·슬리피지. 로컬에 `feat/build-Agent-mvp`가 있다면 그쪽에만 있습니다.
+
+---
+
+## 환경 변수 (`.env`)
+
+저장소 루트에서:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env   # 또는 원하는 편집터
+```
+
+### Docker Desktop용 (경로 A)
+
+```env
+# Compose 마운트용 — 슬래시(/) 권장
+QSEED_HOST_PATH=D:/Users/User/Q-SEED/data
+QSEED_DATA_PATH=/data/qseed
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_MODEL=llama3.2
+DOCKER=1
+```
+
+### 호스트 `uv`용 (경로 B)
+
+```env
+# 로컬에서 직접 읽을 경로 (백슬래시 OK)
+QSEED_DATA_PATH=D:\Users\User\Q-SEED\data
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+DOCKER=0
+```
+
+주의:
+
+- 기본 `.env.example`의 `QSEED_DATA_PATH=/data/qseed`, `OLLAMA_BASE_URL=http://ollama:11434`는 **컨테이너 기준**입니다. 호스트에서 `uv run`할 때 그대로 두면 데이터·Ollama를 찾지 못합니다.
+- `host.docker.internal`은 **컨테이너 → 호스트**용입니다. 호스트 `uv`에서는 `localhost`를 쓰세요.
+- Docker Desktop에서 드라이브 문자 경로가 실패하면 `D:/...` 형태와 따옴표(`"D:/..."`)를 시도하세요. Docker Desktop 설정에서 해당 드라이브 공유가 켜져 있어야 합니다.
+
+---
+
+## 경로 A: Docker Desktop
+
+저장소 루트에서 PowerShell을 엽니다. Make 없이도 `docker compose`로 동일하게 동작합니다.
+
+### 1) Bundled Ollama + 개발 컨테이너
+
+```powershell
+docker compose --profile dev --profile bundled-ollama up -d ollama quantpilot-dev
+```
+
+### 2) 이미 떠 있는 `ollama` 컨테이너만 쓸 때
+
+```powershell
+docker compose --profile dev up -d quantpilot-dev
+
+# 네트워크가 없으면 compose up 이후에 생성됩니다
+docker network connect quantpilot_default ollama
+```
+
+컨테이너 이름이 `ollama`가 아니면 실제 이름에 맞게 바꾸세요. Bundled 서비스 이름은 `quantpilot-ollama`입니다.
+
+### MVP 데모
+
+```powershell
+# AI 없이
+docker compose run --rm quantpilot python scripts/run_mvp.py --symbol 005930.KS --start 2023-01-01 --end 2023-12-31 --skip-ai
+
+# Ollama 전략 리뷰 포함
+docker compose run --rm quantpilot python scripts/run_mvp.py --symbol 005930.KS --start 2023-01-01 --end 2023-12-31
+```
+
+### 에이전트 시뮬레이션 (컨테이너 안)
+
+```powershell
+docker compose exec quantpilot-dev python scripts/run_agent_sim.py --start 2024-01-02 --target 12000000 --period-days 90 --hold-only
+```
+
+### Make가 있는 경우 (선택)
+
+Git Bash / WSL / Make for Windows가 있으면 README의 `make up`, `make demo` 등을 그대로 쓸 수 있습니다.
+
+### 종료
+
+```powershell
+docker compose --profile dev --profile bundled-ollama down
+```
+
+---
+
+## 경로 B: 호스트 `uv`
+
+```powershell
+uv sync
+```
+
+`.env`를 **호스트용**으로 맞춘 뒤:
+
+### MVP
+
+```powershell
+uv run python scripts/run_mvp.py --symbol 005930.KS --skip-ai
+```
+
+### 에이전트 — Hold만 (Ollama 불필요)
+
+```powershell
+uv run python scripts/run_agent_sim.py `
+  --start 2024-01-02 `
+  --capital 10000000 `
+  --target 12000000 `
+  --period-days 90 `
+  --decision-every 5 `
+  --hold-only
+```
+
+### 에이전트 — LLM (호스트 Ollama)
+
+Ollama가 `http://localhost:11434`에서 응답하는지 확인한 뒤:
+
+```powershell
+uv run python scripts/run_agent_sim.py `
+  --symbol 005930.KS `
+  --start 2024-01-02 `
+  --capital 10000000 `
+  --target 12000000 `
+  --period-days 90 `
+  --decision-every 5 `
+  --runs 1 `
+  --model llama3.2
+```
+
+---
+
+## 검증 (테스트·린트)
+
+```powershell
+uv run pytest -m "not integration"
+uv run ruff check .
+uv run black --check .
+uv run mypy quantpilot
+```
+
+에이전트 관련만:
+
+```powershell
+uv run pytest tests/test_agent_decision.py `
+  tests/test_environment_broker.py `
+  tests/test_environment_market_clock.py `
+  tests/test_simulation_session.py `
+  tests/test_package_deps.py -q
+```
+
+Integration 테스트는 Q-SEED 경로가 설정된 환경에서:
+
+```powershell
+uv run pytest -m integration
+```
+
+---
+
+## 트러블슈팅
+
+| 증상 | 확인 |
+|------|------|
+| `QSEED_HOST_PATH` / compose 시작 실패 | `.env`에 절대 경로가 있는지, `D:/...` 형태·드라이브 공유 |
+| 로컬에서 데이터를 못 찾음 | `QSEED_DATA_PATH`가 Windows 실제 폴더인지. `/data/qseed`는 컨테이너 전용 |
+| Ollama 연결 거부 | 호스트 `uv` → `http://localhost:11434`, Compose 내부 → `http://ollama:11434` |
+| `make` 명령 없음 | 이 문서의 `docker compose` / `uv run` 사용 |
+| `make ollama-network` / 네트워크 연결 실패 | 컨테이너 이름이 `ollama`인지 확인. Bundled는 `quantpilot-ollama` |
+| 이미지와 호스트 코드 불일치 | `docker compose build quantpilot` 후 재실행 |
+| PowerShell에서 줄 이어쓰기 | bash의 `\` 대신 백틱 `` ` `` |
+
+---
+
+## 관련 문서
+
+- 제품 개요·Unix Make Quick Start: [`README.md`](../../README.md)
+- 에이전트 규칙·플래그: [`docs/agent/README.md`](../agent/README.md)
+- 환경 변수 템플릿: [`.env.example`](../../.env.example)
