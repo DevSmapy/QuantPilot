@@ -10,10 +10,25 @@ mkdir -p "/mnt/$drive"
 if mountpoint -q "/mnt/$drive"; then
   src=$(findmnt -n -o SOURCE "/mnt/$drive" 2>/dev/null || true)
   fstype=$(findmnt -n -o FSTYPE "/mnt/$drive" 2>/dev/null || true)
-  if [ "$fstype" != "drvfs" ]; then
-    echo "ERROR: /mnt/$drive is mounted as fstype='$fstype' source='$src' (expected ${letter}: drvfs)" >&2
-    exit 1
-  fi
+  opts=$(findmnt -n -o OPTIONS "/mnt/$drive" 2>/dev/null || true)
+  case "$fstype" in
+    drvfs)
+      ;;
+    9p)
+      case "$opts" in
+        *aname=drvfs*)
+          ;;
+        *)
+          echo "ERROR: /mnt/$drive is 9p without aname=drvfs (opts='$opts' source='$src')" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    *)
+      echo "ERROR: /mnt/$drive is mounted as fstype='$fstype' source='$src' (expected ${letter}: drvfs or 9p aname=drvfs)" >&2
+      exit 1
+      ;;
+  esac
   src_norm=$(printf '%s' "$src" | tr 'abcdefghijklmnopqrstuvwxyz\\' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ/')
   letter_u=$(printf '%s' "$letter" | tr 'abcdefghijklmnopqrstuvwxyz' 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
   case "$src_norm" in
