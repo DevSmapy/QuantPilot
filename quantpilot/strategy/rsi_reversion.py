@@ -9,7 +9,11 @@ from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
 
 
 class RSIReversionStrategy:
+<<<<<<< HEAD
     """Enter when RSI first becomes oversold; exit when first overbought."""
+=======
+    """Enter when RSI is oversold; exit when RSI is overbought."""
+>>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
 
     def __init__(
         self,
@@ -26,7 +30,11 @@ class RSIReversionStrategy:
         self.overbought = overbought
 
     def run(self, prices: pl.DataFrame) -> pl.DataFrame:
+<<<<<<< HEAD
         """Generate edge-triggered trade signals from OHLCV price data."""
+=======
+        """Generate trade signals from OHLCV price data."""
+>>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
         if QP_CLOSE not in prices.columns:
             raise ValueError(f"prices must contain '{QP_CLOSE}' column")
 
@@ -37,6 +45,7 @@ class RSIReversionStrategy:
         return (
             with_rsi.with_columns(
                 pl.when(pl.col("rsi") < self.oversold)
+<<<<<<< HEAD
                 .then(pl.lit("oversold"))
                 .when(pl.col("rsi") > self.overbought)
                 .then(pl.lit("overbought"))
@@ -59,4 +68,12 @@ class RSIReversionStrategy:
                 .alias("signal")
             )
             .select(QP_DATE, "signal", "rsi", QP_CLOSE)
+=======
+                .then(1)
+                .when(pl.col("rsi") > self.overbought)
+                .then(-1)
+                .otherwise(0)
+                .alias("signal")
+            ).select(QP_DATE, "signal", "rsi", QP_CLOSE)
+>>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
         )
