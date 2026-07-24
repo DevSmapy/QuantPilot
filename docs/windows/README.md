@@ -76,6 +76,34 @@ DOCKER=1
 
 저장소 루트에서 PowerShell을 엽니다. Make 없이도 `docker compose`로 동일하게 동작합니다.
 
+**전제:** WSL 2가 설치되어 있고, Docker Desktop에서 **WSL integration**이 켜져 있어야 합니다. `windows_docker_up.ps1`은 시작 전에 WSL/`docker` 상태를 검사합니다.
+
+Q-SEED가 **외장/exFAT 드라이브(예: `D:`)** 에 있으면 Docker Desktop의 `D:/...` 바인드가 비어 보일 수 있습니다 (`Symbol not found`로 이어짐). 그 경우 저장소 루트에서:
+
+```powershell
+# 실행 정책에 막히면 Bypass로 한 번만 실행
+powershell -ExecutionPolicy Bypass -File .\scripts\windows_docker_up.ps1
+```
+
+이 스크립트는 WSL에 드라이브를 마운트한 뒤 **bundled Ollama + `quantpilot-dev`** 를 함께 띄웁니다. 별도 외부 Ollama는 필요 없습니다.
+
+또는 스크립트 없이 아래를 그대로 실행 (경로를 본인 Q-SEED `data` 디렉터리로 바꾸세요):
+
+```powershell
+wsl -u root -e sh -c "mkdir -p /mnt/d; mountpoint -q /mnt/d || mount -t drvfs D: /mnt/d"
+if ($LASTEXITCODE -ne 0) { throw "WSL mount of D: failed (exit $LASTEXITCODE)" }
+
+# 아래 경로를 본인 환경에 맞게 교체 (예: /mnt/d/path/to/Q-SEED/data)
+$qseedMnt = "/mnt/d/path/to/Q-SEED/data"
+wsl -u root -e sh -c "test -d `"$qseedMnt`" || { echo Missing data dir: $qseedMnt >&2; exit 1; }"
+if ($LASTEXITCODE -ne 0) { throw "Q-SEED data dir not found at $qseedMnt" }
+
+$env:QSEED_HOST_PATH = $qseedMnt
+docker compose --profile dev --profile bundled-ollama up -d --force-recreate ollama quantpilot-dev
+```
+
+일반 NTFS `C:` 경로면 아래 표준 `up`으로 충분합니다.
+
 ### 1) Bundled Ollama + 개발 컨테이너
 
 ```powershell
@@ -229,6 +257,7 @@ uv run pytest -m integration
 | 증상 | 확인 |
 |------|------|
 | `QSEED_HOST_PATH` / compose 시작 실패 | `.env`에 절대 경로가 있는지, `D:/...` 형태·드라이브 공유 |
+| `Symbol not found` + `/data/qseed`가 비어 있음 | 호스트에는 parquet이 있는데 컨테이너만 비면 **exFAT/외장 드라이브 마운트 문제**. `powershell -ExecutionPolicy Bypass -File .\scripts\windows_docker_up.ps1` 사용 (WSL 2 + Docker WSL integration 필요). `QSEED_DATA_PATH`는 `/data/qseed`(컨테이너 경로)여야 함 — Windows `D:/...`를 DATA_PATH에 넣지 말 것 |
 | 로컬에서 데이터를 못 찾음 | `QSEED_HOST_PATH`가 실제 폴더인지. `/data/qseed`만 두고 호스트 경로를 비우면 fallback 실패 |
 | Ollama 연결 거부 | Docker → `http://ollama:11434` + ollama 기동. 호스트 → localhost(자동 변환). 컨테이너인데 host-only URL을 강제로 넣지 않았는지 확인 |
 | `make` 명령 없음 | 이 문서의 `docker compose` / `uv run` 사용 |
