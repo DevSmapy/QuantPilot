@@ -5,6 +5,8 @@
 이 문서가 다루는 것: 공정한 시뮬레이션 루프, 매도·수익화, 매도 사유 강제.  
 다루지 않는 것: LLM 수익 보장, 차트 UI, 다종목·실거래.
 
+Windows(PowerShell / Docker Desktop)에서 환경 설정·실행만 필요하면 [`docs/windows/README.md`](../windows/README.md)를 먼저 보세요.
+
 ---
 
 ## 패키지 구조
@@ -57,15 +59,15 @@ scripts/run_agent_sim.py
 
 | 변수 | 로컬 `uv run` | Docker Compose |
 |------|---------------|----------------|
-| `QSEED_DATA_PATH` | Mac의 Q-SEED data **절대 경로** | 보통 `/data/qseed` (컨테이너 내부) |
-| `QSEED_HOST_PATH` | 불필요 | Mac의 Q-SEED data 절대 경로 → `/data/qseed`로 마운트 |
+| `QSEED_DATA_PATH` | 호스트 Q-SEED data **절대 경로** | 보통 `/data/qseed` (컨테이너 내부) |
+| `QSEED_HOST_PATH` | 불필요 | 호스트 Q-SEED data 절대 경로 → `/data/qseed`로 마운트 |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | bundled면 `http://ollama:11434` |
 | `OLLAMA_MODEL` | 예: `llama3.2` | 동일 |
 | `DOCKER` | `0` | `1` |
 
-`/data/qseed`는 Docker 컨테이너 안 마운트 경로입니다. Mac에서 `uv run`할 때 그대로 쓰면 데이터를 찾지 못합니다.
+`/data/qseed`는 Docker 컨테이너 안 마운트 경로입니다. 호스트에서 `uv run`할 때 그대로 쓰면 데이터를 찾지 못합니다.
 
-`host.docker.internal`은 **컨테이너 → 호스트**용입니다. Mac에서 `uv run`할 때는 `localhost`를 쓰세요.
+`host.docker.internal`은 **컨테이너 → 호스트**용입니다. 호스트에서 `uv run`할 때는 `localhost`를 쓰세요.
 
 Q-SEED data 디렉터리 예시:
 
@@ -159,6 +161,8 @@ uv run pytest tests/test_agent_decision.py \
 ---
 
 ## 후속 (미구현)
+
+아래는 **`main` 기준**으로 아직 없습니다. (일부는 다른 feature 브랜치에만 있을 수 있습니다.)
 
 - equity / 매매 마커 차트, Streamlit
 - 다종목 유니버스, 수수료·슬리피지

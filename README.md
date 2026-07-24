@@ -6,6 +6,8 @@
 
 QuantPilot은 다양한 금융 데이터 소스를 하나의 인터페이스로 통합하여 데이터 분석, 전략 개발, 백테스트, AI 리서치, 포트폴리오 관리, 자동 투자까지 수행하는 Quant Research Platform입니다.
 
+**Windows에서 실행:** PowerShell / Docker Desktop 기준 가이드는 [`docs/windows/README.md`](docs/windows/README.md)를 보세요. Make 없이도 MVP·에이전트 CLI를 돌릴 수 있습니다.
+
 ---
 
 ## 핵심 가치
@@ -144,16 +146,17 @@ feature/*     ← 기능 단위 개발
 
 ---
 
-## MVP Quick Start (`feat/build-mvp`)
+## MVP Quick Start
 
 Vertical slice: Q-SEED data → SMA strategy → backtest → Ollama review.
 
-모든 실행 환경은 **Docker + uv** 기준입니다. Ollama는 Docker 컨테이너에서 실행됩니다.
+모든 실행 환경은 **Docker + uv** 기준입니다. Ollama는 Docker 컨테이너에서 실행됩니다. Windows(PowerShell) 전용 단계는 [`docs/windows/README.md`](docs/windows/README.md)를 참고하세요.
 
 ### 1. 환경 설정
 
 ```bash
 cp .env.example .env
+# PowerShell: Copy-Item .env.example .env
 # QSEED_HOST_PATH를 본인 Q-SEED data 디렉터리 절대 경로로 설정 (필수)
 # 기본 Ollama URL: http://ollama:11434 (`make up` bundled flow)
 ```
@@ -225,7 +228,7 @@ uv run pytest -m integration
 
 ```bash
 # .env 예시
-QSEED_DATA_PATH=/absolute/path/to/Q-SEED/data   # Mac의 실제 Q-SEED data 경로
+QSEED_DATA_PATH=/absolute/path/to/Q-SEED/data   # 호스트(Windows/Mac) Q-SEED data 절대 경로
 OLLAMA_BASE_URL=http://localhost:11434          # 호스트에서 실행 시 (host.docker.internal 아님)
 OLLAMA_MODEL=llama3.2
 DOCKER=0
