@@ -76,6 +76,14 @@ DOCKER=1
 
 저장소 루트에서 PowerShell을 엽니다. Make 없이도 `docker compose`로 동일하게 동작합니다.
 
+Q-SEED가 **외장/exFAT 드라이브(예: `D:`)** 에 있으면 Docker Desktop의 `D:/...` 바인드가 비어 보일 수 있습니다 (`Symbol not found`로 이어짐). 그 경우:
+
+```powershell
+.\scripts\windows_docker_up.ps1
+```
+
+이 스크립트는 WSL에 드라이브를 `drvfs`로 마운트한 뒤, Compose 바인드에 `/mnt/d/...` 경로를 씁니다. 일반 NTFS `C:` 경로면 아래 표준 `up`으로 충분합니다.
+
 ### 1) Bundled Ollama + 개발 컨테이너
 
 ```powershell
@@ -229,6 +237,7 @@ uv run pytest -m integration
 | 증상 | 확인 |
 |------|------|
 | `QSEED_HOST_PATH` / compose 시작 실패 | `.env`에 절대 경로가 있는지, `D:/...` 형태·드라이브 공유 |
+| `Symbol not found` + `/data/qseed`가 비어 있음 | 호스트에는 parquet이 있는데 컨테이너만 비면 **exFAT/외장 드라이브 마운트 문제**. `.\scripts\windows_docker_up.ps1` 사용. `QSEED_DATA_PATH`는 `/data/qseed`(컨테이너 경로)여야 함 — Windows `D:/...`를 DATA_PATH에 넣지 말 것 |
 | 로컬에서 데이터를 못 찾음 | `QSEED_HOST_PATH`가 실제 폴더인지. `/data/qseed`만 두고 호스트 경로를 비우면 fallback 실패 |
 | Ollama 연결 거부 | Docker → `http://ollama:11434` + ollama 기동. 호스트 → localhost(자동 변환). 컨테이너인데 host-only URL을 강제로 넣지 않았는지 확인 |
 | `make` 명령 없음 | 이 문서의 `docker compose` / `uv run` 사용 |
