@@ -106,6 +106,7 @@ def test_backtest_engine_round_trip_and_costs() -> None:
     assert free.profit_factor == float("inf")
     assert costly.total_return < free.total_return
     assert costly.equity_curve[-1] < free.equity_curve[-1]
+<<<<<<< HEAD
     assert len(costly.trade_pnls) == 1
     assert costly.trade_pnls[0] == pytest.approx(0.07811)
 
@@ -124,6 +125,8 @@ def test_backtest_engine_rejects_invalid_cost_rate() -> None:
             signals,
             costs=TradingCosts(commission_rate=0.5, slippage_bps=6000.0),
         )
+=======
+>>>>>>> f860d31 (feat(backtest): metrics, richer result, TradingCosts)
 
 
 def test_backtest_engine_returns_metrics(sample_prices: pl.DataFrame) -> None:
