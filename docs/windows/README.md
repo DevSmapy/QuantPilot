@@ -76,13 +76,22 @@ DOCKER=1
 
 저장소 루트에서 PowerShell을 엽니다. Make 없이도 `docker compose`로 동일하게 동작합니다.
 
-Q-SEED가 **외장/exFAT 드라이브(예: `D:`)** 에 있으면 Docker Desktop의 `D:/...` 바인드가 비어 보일 수 있습니다 (`Symbol not found`로 이어짐). 그 경우:
+Q-SEED가 **외장/exFAT 드라이브(예: `D:`)** 에 있으면 Docker Desktop의 `D:/...` 바인드가 비어 보일 수 있습니다 (`Symbol not found`로 이어짐). 그 경우 저장소 루트에서:
 
 ```powershell
-.\scripts\windows_docker_up.ps1
+# 실행 정책에 막히면 Bypass로 한 번만 실행
+powershell -ExecutionPolicy Bypass -File .\scripts\windows_docker_up.ps1
 ```
 
-이 스크립트는 WSL에 드라이브를 `drvfs`로 마운트한 뒤, Compose 바인드에 `/mnt/d/...` 경로를 씁니다. 일반 NTFS `C:` 경로면 아래 표준 `up`으로 충분합니다.
+또는 스크립트 없이 아래 세 줄을 그대로 실행:
+
+```powershell
+wsl -u root -e sh -c "mkdir -p /mnt/d; mountpoint -q /mnt/d || mount -t drvfs D: /mnt/d"
+$env:QSEED_HOST_PATH="/mnt/d/Careers/PythonProjects/Q-SEED/data"
+docker compose --profile dev up -d --force-recreate quantpilot-dev
+```
+
+일반 NTFS `C:` 경로면 아래 표준 `up`으로 충분합니다.
 
 ### 1) Bundled Ollama + 개발 컨테이너
 
