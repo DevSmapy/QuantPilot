@@ -10,10 +10,14 @@ from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
 
 class RSIReversionStrategy:
 <<<<<<< HEAD
+<<<<<<< HEAD
     """Enter when RSI first becomes oversold; exit when first overbought."""
 =======
     """Enter when RSI is oversold; exit when RSI is overbought."""
 >>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
+=======
+    """Enter when RSI first becomes oversold; exit when first overbought."""
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
     def __init__(
         self,
@@ -31,10 +35,14 @@ class RSIReversionStrategy:
 
     def run(self, prices: pl.DataFrame) -> pl.DataFrame:
 <<<<<<< HEAD
+<<<<<<< HEAD
         """Generate edge-triggered trade signals from OHLCV price data."""
 =======
         """Generate trade signals from OHLCV price data."""
 >>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
+=======
+        """Generate edge-triggered trade signals from OHLCV price data."""
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
         if QP_CLOSE not in prices.columns:
             raise ValueError(f"prices must contain '{QP_CLOSE}' column")
 
@@ -43,10 +51,16 @@ class RSIReversionStrategy:
         with_rsi = frame.with_columns(rsi_values.alias("rsi"))
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         return (
             with_rsi.with_columns(
                 pl.when(pl.col("rsi") < self.oversold)
 <<<<<<< HEAD
+=======
+        return (
+            with_rsi.with_columns(
+                pl.when(pl.col("rsi") < self.oversold)
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
                 .then(pl.lit("oversold"))
                 .when(pl.col("rsi") > self.overbought)
                 .then(pl.lit("overbought"))
@@ -69,6 +83,7 @@ class RSIReversionStrategy:
                 .alias("signal")
             )
             .select(QP_DATE, "signal", "rsi", QP_CLOSE)
+<<<<<<< HEAD
 =======
                 .then(1)
                 .when(pl.col("rsi") > self.overbought)
@@ -88,3 +103,6 @@ class RSIReversionStrategy:
             .alias("signal")
         ).select(QP_DATE, "signal", "rsi", QP_CLOSE)
 >>>>>>> 39ae0ff (fix(analysis-quant): satisfy mypy and ruff on new modules)
+=======
+        )
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)

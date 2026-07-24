@@ -6,10 +6,14 @@ strategy → backtest → metrics** pipeline for one symbol at a time.
 ## Pipeline
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 ```text
 =======
 ```
 >>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
+=======
+```text
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 DataSourceManager.get_price
         ↓
 Strategy.run  →  signal ∈ {-1, 0, 1}
@@ -22,11 +26,16 @@ BacktestResult (return / CAGR / MDD / Sharpe / Sortino / PF / win rate /
 
 Optional: `run_walk_forward` rolls fixed-parameter out-of-sample windows
 <<<<<<< HEAD
+<<<<<<< HEAD
 (train dates are metadata only; no optimization). Signals use train+test
 context for indicator warm-up, then only the test period is backtested.
 =======
 (train dates are metadata only; no optimization).
 >>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
+=======
+(train dates are metadata only; no optimization). Signals use train+test
+context for indicator warm-up, then only the test period is backtested.
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
 ## Signal contract
 
@@ -41,23 +50,19 @@ Event signals (not a continuous position target):
 Look-ahead rule: the signal on bar `t` is executed when forming bar `t+1`
 returns (same as the original MVP engine).
 
-The engine only **enters when flat** and **exits when long**. Repeated `1`
-while already long (or `-1` while flat) is ignored — so raw signal counts are
-not the same as fills / round-trips.
-
 ## Costs (honest limits)
 
 `TradingCosts` applies a **proportional equity haircut** on entry and exit:
 
 `commission_rate + slippage_bps / 10_000`
 
-This is **not** share-level fill simulation (see agent `PaperBroker` for that).
-Treat it as a research haircut, not a broker model.
+This is not share-level fill simulation (see agent `PaperBroker` for that).
 
 ## Strategies
 
 | CLI `--strategy` | Class | Notes |
 |------------------|-------|-------|
+<<<<<<< HEAD
 <<<<<<< HEAD
 | `sma_cross` | `SMACrossStrategy` | fast/slow SMA cross events (uses `indicators.sma`) |
 <<<<<<< HEAD
@@ -100,6 +105,10 @@ out of scope for this MVP+.
 4. **Costs are haircuts** — proportional equity haircut, not `PaperBroker`
    share fills.
 >>>>>>> 31be82b (docs(analysis-quant): document RSI, walk-forward, and metrics limits (#10))
+=======
+| `sma_cross` | `SMACrossStrategy` | fast/slow SMA cross events (uses `indicators.sma`) |
+| `rsi_reversion` | `RSIReversionStrategy` | Edge into oversold (`1`) / overbought (`-1`); hold while regime persists |
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
 ## Cloud vs local testing
 
@@ -107,9 +116,6 @@ out of scope for this MVP+.
 |-------|------|-----|
 | Cursor Cloud / CI | Synthetic `sample_prices` + literal fixtures | Agent (`pytest -m "not integration"`) |
 | Your machine | Real Q-SEED via `QSEED_HOST_PATH` | You (smoke after pull) |
-
-Lint note: `ruff check .` may still fail on pre-existing E501 in agent/streamlit
-paths; the analysis-quant changed paths are kept clean.
 
 ## Local Q-SEED smoke checklist
 
@@ -133,7 +139,6 @@ uv run python scripts/run_mvp.py --symbol 005930.KS --skip-ai \
 
 5. Check: row count loaded, buy/sell signal counts, return/CAGR/MDD/Sharpe/Sortino/trades,
    and that costs produce worse equity than a zero-cost run on the same inputs.
-   Remember signal counts for `rsi_reversion` can exceed trade fills (see above).
 
 Optional:
 
@@ -144,5 +149,4 @@ uv run pytest -m integration
 ## Out of scope (follow-up)
 
 EMA/MACD/Bollinger/ATR library expansion, `feature_engineering`, monthly returns,
-parameter grids, portfolio backtests, Streamlit analytics, RSI redesign as
-crossover-only events, walk-forward indicator warm-up.
+parameter grids, portfolio backtests, Streamlit analytics.

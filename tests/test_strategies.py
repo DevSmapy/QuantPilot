@@ -94,6 +94,7 @@ def test_rsi_reversion_emits_edge_triggered_events_only() -> None:
     assert oversold_signals.count(1) == 1
     overbought_signals = signals.filter(signals["rsi"] > 60.0)["signal"].to_list()
     assert overbought_signals.count(-1) == 1
+<<<<<<< HEAD
 =======
     import pytest
 
@@ -102,3 +103,5 @@ def test_rsi_reversion_emits_edge_triggered_events_only() -> None:
     with pytest.raises(ValueError):
         RSIReversionStrategy(oversold=70.0, overbought=30.0)
 >>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
+=======
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)

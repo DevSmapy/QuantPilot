@@ -36,6 +36,7 @@ def run_walk_forward(
     """Run fixed-parameter rolling OOS backtests.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     Signals are generated on train+test context so indicators warm up on
     pre-test history, then only test-period signals are backtested. Train
     dates remain metadata (no in-sample optimization).
@@ -43,6 +44,11 @@ def run_walk_forward(
     Each fold records a train date range for documentation only. Signals and
     the backtest run solely on the test slice (no in-sample optimization).
 >>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
+=======
+    Signals are generated on train+test context so indicators warm up on
+    pre-test history, then only test-period signals are backtested. Train
+    dates remain metadata (no in-sample optimization).
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
     """
     if train_bars < 1 or test_bars < 1 or step_bars < 1:
         raise ValueError("train_bars, test_bars, and step_bars must be >= 1")
@@ -62,15 +68,21 @@ def run_walk_forward(
         train_slice = frame.slice(start, train_bars)
         test_slice = frame.slice(train_end, test_bars)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
         context = pl.concat([train_slice, test_slice], how="vertical")
         context_signals = strategy.run(context)
         test_start_date = test_slice[QP_DATE][0]
         test_signals = context_signals.filter(pl.col(QP_DATE) >= test_start_date)
         result = engine.run(test_slice, test_signals, costs=costs)
+<<<<<<< HEAD
 =======
         signals = strategy.run(test_slice)
         result = engine.run(test_slice, signals, costs=costs)
 >>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
+=======
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
         train_dates = train_slice[QP_DATE].to_list()
         test_dates = test_slice[QP_DATE].to_list()

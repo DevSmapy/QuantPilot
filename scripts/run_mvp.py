@@ -114,10 +114,15 @@ def main() -> None:
             "sharpe": f"{result.sharpe:.2f}",
             "sortino": f"{result.sortino:.2f}",
 <<<<<<< HEAD
+<<<<<<< HEAD
             "profit_factor": f"{result.profit_factor:.2f}",
             "win_rate": f"{result.win_rate:.2%}",
 =======
 >>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
+=======
+            "profit_factor": f"{result.profit_factor:.2f}",
+            "win_rate": f"{result.win_rate:.2%}",
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
             "trades": result.trades_count,
         },
         summary=f"Long-only {strategy_label} backtest on {args.symbol}.",

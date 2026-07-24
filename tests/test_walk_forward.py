@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 from datetime import date, timedelta
 
 import polars as pl
@@ -10,11 +13,14 @@ import pytest
 
 from quantpilot.backtest.walk_forward import run_walk_forward
 from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
+<<<<<<< HEAD
 =======
 import pytest
 
 from quantpilot.backtest.walk_forward import run_walk_forward
 >>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
+=======
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 from quantpilot.strategy.sma_cross import SMACrossStrategy
 
 
@@ -55,6 +61,9 @@ def test_walk_forward_rejects_invalid_window_sizes(sample_prices) -> None:
             step_bars=5,
         )
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
 
 def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
@@ -96,5 +105,8 @@ def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
     assert warm_oos.filter(pl.col("signal") == 1).height >= cold.filter(
         pl.col("signal") == 1
     ).height
+<<<<<<< HEAD
 =======
 >>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
+=======
+>>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
