@@ -150,7 +150,7 @@ feature/*     ← 기능 단위 개발
 
 Vertical slice: Q-SEED data → SMA strategy → backtest → Ollama review.
 
-모든 실행 환경은 **Docker + uv** 기준입니다. Ollama는 Docker 컨테이너에서 실행됩니다. Windows(PowerShell) 전용 단계는 [`docs/windows/README.md`](docs/windows/README.md)를 참고하세요.
+기본 경로는 **Docker + 컨테이너 Ollama**(`make up` / Compose)입니다. 호스트 `uv`와 호스트 Ollama로도 실행할 수 있습니다. Windows(PowerShell)의 Docker·호스트 `uv` 절차는 [`docs/windows/README.md`](docs/windows/README.md)를 참고하세요.
 
 ### 1. 환경 설정
 

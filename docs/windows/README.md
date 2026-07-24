@@ -58,10 +58,12 @@ OLLAMA_MODEL=llama3.2
 DOCKER=1
 ```
 
+`DOCKER`는 Compose/문서용 **정보성 플래그**입니다. 경로·Ollama URL 해석에는 쓰이지 않으며, 호스트에서 `uv run`할 때 Docker 의미로 동작하게 만들지도 않습니다. 컨테이너 여부는 `/.dockerenv` 또는 `QUANTPILOT_IN_DOCKER=1`로 판별합니다.
+
 동작 요약:
 
 - **Docker Compose**: `QSEED_HOST_PATH`를 `/data/qseed`로 마운트하고, Ollama는 `http://ollama:11434`를 사용합니다.
-- **호스트 `uv run`**: `/data/qseed`가 없으면 `QSEED_HOST_PATH`로 자동 fallback하고, `http://ollama:11434`는 `http://localhost:11434`로 자동 변환됩니다.
+- **호스트 `uv run`**: `/data/qseed`가 없으면 `QSEED_HOST_PATH`로 자동 fallback하고, `http://ollama:11434`는 `http://localhost:11434`로 자동 변환됩니다 (`DOCKER` 값과 무관).
 - Windows 경로는 **슬래시(`/`)** 형태를 권장합니다 (`D:/...`).
 - `host.docker.internal`은 **컨테이너 → 호스트**용입니다. 호스트 `uv`에서는 보통 자동 변환된 `localhost`를 쓰면 됩니다.
 - Docker Desktop에서 드라이브 문자 경로가 실패하면 따옴표(`"D:/..."`)를 시도하세요. 해당 드라이브 공유가 켜져 있어야 합니다.
