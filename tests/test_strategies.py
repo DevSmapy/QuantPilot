@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import polars as pl
+import pytest
 
 from quantpilot.backtest.engine import BacktestEngine
 from quantpilot.strategy.base import Strategy
@@ -42,7 +43,5 @@ def test_both_strategies_run_on_same_engine(sample_prices: pl.DataFrame) -> None
 
 
 def test_rsi_reversion_rejects_invalid_thresholds() -> None:
-    import pytest
-
     with pytest.raises(ValueError):
         RSIReversionStrategy(oversold=70.0, overbought=30.0)
