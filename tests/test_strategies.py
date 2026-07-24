@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import polars as pl
 <<<<<<< HEAD
+<<<<<<< HEAD
 import pytest
 =======
 >>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
+=======
+import pytest
+>>>>>>> 5ff411f (style(test): move pytest import to module top)
 
 from quantpilot.backtest.engine import BacktestEngine
 from quantpilot.strategy.base import Strategy
@@ -46,6 +50,7 @@ def test_both_strategies_run_on_same_engine(sample_prices: pl.DataFrame) -> None
 
 
 def test_rsi_reversion_rejects_invalid_thresholds() -> None:
+<<<<<<< HEAD
 <<<<<<< HEAD
     with pytest.raises(ValueError):
         RSIReversionStrategy(oversold=70.0, overbought=30.0)
@@ -92,6 +97,8 @@ def test_rsi_reversion_emits_edge_triggered_events_only() -> None:
 =======
     import pytest
 
+=======
+>>>>>>> 5ff411f (style(test): move pytest import to module top)
     with pytest.raises(ValueError):
         RSIReversionStrategy(oversold=70.0, overbought=30.0)
 >>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
