@@ -116,7 +116,7 @@ quantpilot/
 | Phase | 내용 | 상태 |
 |-------|------|------|
 | 1 | Data Platform — Provider, DataSourceManager, Cache, Q-SEED 연동 | 진행 예정 |
-| 2 | Quant Engine — Indicator, Strategy, Backtest | |
+| 2 | Quant Engine — Indicator, Strategy, Backtest | 진행 중 (`feat/analysis-quant`, [docs/analysis-quant/README.md](docs/analysis-quant/README.md)) |
 | 3 | AI Research — LLM, 뉴스 분석, 전략 리뷰 | |
 | 4 | Portfolio — Optimizer, Risk Management | |
 | 5 | Auto Trading — Broker API, 실시간 주문 | |
