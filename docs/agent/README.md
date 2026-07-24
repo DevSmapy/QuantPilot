@@ -5,6 +5,8 @@
 이 문서가 다루는 것: 공정한 시뮬레이션 루프, 매도·수익화, 매도 사유 강제, 다종목·비용, Streamlit 차트.  
 다루지 않는 것: LLM 수익 보장, 실거래.
 
+Windows(PowerShell / Docker Desktop)에서 환경 설정·실행만 필요하면 [`docs/windows/README.md`](../windows/README.md)를 먼저 보세요.
+
 ---
 
 ## 패키지 구조
@@ -57,7 +59,7 @@ scripts/streamlit_agent_sim.py
 
 ## 환경 변수
 
-Mac / Windows 공통: `.env`에 **호스트 절대 경로**만 맞추면 Docker와 로컬 `uv run` 모두에서 동작합니다.
+Mac / Windows 공통: `.env`에 **호스트 절대 경로**만 맞추면 Docker와 로컬 `uv run` 모두에서 동작합니다. Windows는 `D:/Users/User/Q-SEED/data`처럼 슬래시(`/`) 형태를 권장합니다.
 
 | 변수 | 역할 |
 |------|------|
