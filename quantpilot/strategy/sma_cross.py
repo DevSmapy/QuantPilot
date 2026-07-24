@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import polars as pl
 
+from quantpilot.indicators.sma import sma
 from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
 
 
@@ -21,15 +22,11 @@ class SMACrossStrategy:
         if QP_CLOSE not in prices.columns:
             raise ValueError(f"prices must contain '{QP_CLOSE}' column")
 
-        frame = prices.sort(QP_DATE).with_columns(
-            pl.col(QP_CLOSE)
-            .cast(pl.Float64)
-            .rolling_mean(window_size=self.fast_window)
-            .alias("fast_sma"),
-            pl.col(QP_CLOSE)
-            .cast(pl.Float64)
-            .rolling_mean(window_size=self.slow_window)
-            .alias("slow_sma"),
+        frame = prices.sort(QP_DATE)
+        close = frame[QP_CLOSE]
+        frame = frame.with_columns(
+            sma(close, self.fast_window).alias("fast_sma"),
+            sma(close, self.slow_window).alias("slow_sma"),
         )
 
         signals = (
