@@ -91,8 +91,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows_docker_up.ps1
 
 ```powershell
 wsl -u root -e sh -c "mkdir -p /mnt/d; mountpoint -q /mnt/d || mount -t drvfs D: /mnt/d"
+if ($LASTEXITCODE -ne 0) { throw "WSL mount of D: failed (exit $LASTEXITCODE)" }
+
 # 아래 경로를 본인 환경에 맞게 교체 (예: /mnt/d/path/to/Q-SEED/data)
-$env:QSEED_HOST_PATH="/mnt/d/path/to/Q-SEED/data"
+$qseedMnt = "/mnt/d/path/to/Q-SEED/data"
+wsl -u root -e sh -c "test -d `"$qseedMnt`" || { echo Missing data dir: $qseedMnt >&2; exit 1; }"
+if ($LASTEXITCODE -ne 0) { throw "Q-SEED data dir not found at $qseedMnt" }
+
+$env:QSEED_HOST_PATH = $qseedMnt
 docker compose --profile dev --profile bundled-ollama up -d --force-recreate ollama quantpilot-dev
 ```
 

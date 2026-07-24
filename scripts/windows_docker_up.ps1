@@ -32,7 +32,7 @@ docker version | Out-Null
 Assert-LastExitCode "docker version (is Docker Desktop running with WSL backend?)"
 
 docker info | Out-Null
-Assert-LastExitCode "docker info (Docker engine not reachable — start Docker Desktop / enable WSL integration)"
+Assert-LastExitCode "docker info (Docker engine not reachable - start Docker Desktop / enable WSL integration)"
 
 if (-not $HostDataPath) {
     if (Test-Path ".env") {
