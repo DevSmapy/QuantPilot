@@ -5,7 +5,11 @@ strategy → backtest → metrics** pipeline for one symbol at a time.
 
 ## Pipeline
 
+<<<<<<< HEAD
 ```text
+=======
+```
+>>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
 DataSourceManager.get_price
         ↓
 Strategy.run  →  signal ∈ {-1, 0, 1}
@@ -17,8 +21,12 @@ BacktestResult (return / CAGR / MDD / Sharpe / Sortino / PF / win rate /
 ```
 
 Optional: `run_walk_forward` rolls fixed-parameter out-of-sample windows
+<<<<<<< HEAD
 (train dates are metadata only; no optimization). Signals use train+test
 context for indicator warm-up, then only the test period is backtested.
+=======
+(train dates are metadata only; no optimization).
+>>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
 
 ## Signal contract
 
@@ -46,7 +54,11 @@ This is not share-level fill simulation (see agent `PaperBroker` for that).
 | CLI `--strategy` | Class | Notes |
 |------------------|-------|-------|
 | `sma_cross` | `SMACrossStrategy` | fast/slow SMA cross events (uses `indicators.sma`) |
+<<<<<<< HEAD
 | `rsi_reversion` | `RSIReversionStrategy` | Edge into oversold (`1`) / overbought (`-1`); hold while regime persists |
+=======
+| `rsi_reversion` | `RSIReversionStrategy` | RSI &lt; 30 enter, RSI &gt; 70 exit |
+>>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
 
 ## Cloud vs local testing
 

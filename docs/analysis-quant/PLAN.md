@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # feat/analysis-quant — single-asset analysis MVP+
 
 > Extend the Q-SEED → strategy → backtest slice so strategies are swappable and
@@ -56,93 +57,63 @@ completed round-trip `trade_pnls`.
 **Local (user):** Q-SEED smoke via README checklist after pulling this branch.
 =======
 # feat/analysis-quant — Quant Analysis Engine 작업 계획
+=======
+# feat/analysis-quant — single-asset analysis MVP+
+>>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
 
-> Phase 2 (Quant Engine)를 MVP 수준에서 **재사용 가능한 분석 엔진**으로 확장한다.
-> 기준 문서: [`plan.md`](../../plan.md) §6 Backtesting / §11 Phase 2
+> Extend the Q-SEED → strategy → backtest slice so strategies are swappable and
+> metrics/costs are usable for local research. Not a full Phase 2 completion.
 
----
-
-## 1. 목표
-
-`DataSourceManager`로 받은 가격 데이터에 대해
-
-1. 지표(indicator)를 조합하고
-2. 전략(strategy)이 시그널을 생성하며
-3. 백테스트가 성과·리스크 지표를 산출하고
-4. CLI/테스트로 검증 가능
-
-한 **분석 파이프라인**을 만든다.
-
-성공 기준:
-
-- 전략/지표/백테스트가 공통 인터페이스로 교체 가능
-- look-ahead bias 없이 시그널 실행
-- `plan.md`에 명시된 핵심 성과지표 대부분 산출
-- Provider를 직접 호출하지 않음 (`DataSourceManager`만 사용)
+See also: [`README.md`](README.md) (usage + local Q-SEED checklist).
 
 ---
 
-## 2. 현재 상태 (As-Is)
+## Goal
 
-| 영역 | 구현 | 한계 |
-|------|------|------|
-| Indicators | `sma`, `rsi` | EMA/MACD/ATR/볼린저 없음, 공통 API 없음 |
-| Strategy | `SMACrossStrategy` | 베이스 클래스 없음, RSI 전략 등 확장 경로 없음 |
-| Backtest | `BacktestEngine` (long-only) | 수수료·슬리피지·포지션 사이징·equity curve 미반환 |
-| Metrics | total_return, CAGR, MDD, Sharpe, trades | Sortino, Profit Factor, Win Rate, Monthly Return 없음 |
-| Modes | Single Asset only | Portfolio / Walk Forward / Rolling Window 없음 |
-| Feature Eng. | 없음 | `plan.md`의 `feature_engineering/` 미구현 |
-| CLI | `scripts/run_mvp.py` | SMA Cross 고정 |
-
-Agent Simulation(`environment` / `simulation`)은 별도 트랙이며, 본 브랜치는 **규칙 기반 퀀트 분석**에 집중한다.
+`DataSourceManager` → `Strategy` → `BacktestEngine` (+ `TradingCosts`) → richer
+`BacktestResult`, with CLI flags and synthetic unit tests in cloud; real Q-SEED
+smoke on the user's machine.
 
 ---
 
-## 3. 범위 (In / Out)
+## In scope (this branch)
 
-### In Scope
+- `Strategy` protocol + `SMACrossStrategy` + `RSIReversionStrategy`
+- Metrics: Sortino, Profit Factor, Win Rate, equity_curve, trade_pnls
+- Proportional cost haircut via existing `TradingCosts`
+- Rolling OOS helper (`run_walk_forward`, train metadata only)
+- `scripts/run_mvp.py` strategy/cost flags
+- Docs + local Q-SEED checklist
 
-- Indicator 라이브러리 확장 + 공통 시그니처
-- Strategy protocol / base
-- Backtest 엔진 고도화 (비용, 메트릭, equity curve)
-- Walk-forward / rolling window (single-asset)
-- Feature helpers (수익률, 롤링 통계 등 최소 세트)
-- 단위 테스트 + 문서 + 데모 CLI 확장
+## Out of scope (follow-up)
 
-### Out of Scope (후속 브랜치)
-
-- Portfolio optimizer (Mean Variance, Risk Parity 등) → Phase 4
-- Broker / live trading → Phase 5
-- Streamlit analytics dashboard → Phase 6
-- vectorbt / Backtrader 직접 의존 (필요 시 별도 평가; 1차는 Polars 자체 구현)
-- 멀티 자산 클래스 / 선물·옵션
+- New indicator files (EMA/MACD/BB/ATR)
+- `feature_engineering/`
+- `monthly_returns`
+- Parameter optimization / grids
+- Portfolio / live trading / Streamlit analytics dashboard
+- vectorbt / Backtrader
 
 ---
 
-## 4. 제안 패키지 구조
+## Contracts
 
-```
-quantpilot/
-├── indicators/
-│   ├── __init__.py          # 공개 API re-export
-│   ├── base.py              # Indicator protocol / helpers
-│   ├── sma.py / ema.py / rsi.py / macd.py / atr.py / bollinger.py
-├── strategy/
-│   ├── __init__.py
-│   ├── base.py              # Strategy protocol (run → signals)
-│   ├── sma_cross.py
-│   └── rsi_reversion.py     # 예시 전략 1개 추가
-├── feature_engineering/
-│   ├── __init__.py
-│   └── returns.py           # log/simple return, rolling vol 등
-├── backtest/
-│   ├── __init__.py
-│   ├── costs.py             # commission / slippage (환경 모듈과 정합 가능하면 재사용)
-│   ├── metrics.py           # CAGR, MDD, Sharpe, Sortino, ...
-│   ├── engine.py            # event-driven long-only (+ 옵션 long/flat)
-│   └── walk_forward.py      # train/test 윈도우 분할 실행
-```
+**Signals:** event `{-1,0,1}` — enter / exit / hold (not a position series).
 
+**Look-ahead:** signal on bar `t` applies to bar `t+1` close-to-close return.
+
+**Costs:** `commission_rate + slippage_bps/1e4` equity haircut on entry and exit.
+
+**Metrics:** MDD `<= 0`; Sharpe/Sortino annualized with `√252`; PF from
+completed round-trip `trade_pnls`.
+
+---
+
+## Acceptance
+
+**Cloud (agent):** unit tests + ruff + black + mypy green on synthetic data.
+
+<<<<<<< HEAD
 설계 원칙:
 
 - 전략은 `DataFrame(date, OHLCV…)` → `DataFrame(date, signal∈{-1,0,1}, …)`
@@ -261,3 +232,6 @@ uv run mypy quantpilot
 이 계획이 확정되면 Step 0(API 계약)부터 구현을 시작한다.
 우선순위 조정이 필요하면 (예: Walk-forward를 뒤로, 비용/메트릭을 먼저) 이 문서를 갱신한다.
 >>>>>>> b32ad17 (docs(analysis-quant): Phase 2 Quant Engine 작업 계획 추가)
+=======
+**Local (user):** Q-SEED smoke via README checklist after pulling this branch.
+>>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
