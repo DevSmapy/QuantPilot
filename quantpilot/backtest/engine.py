@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import polars as pl
 
+from quantpilot.environment.costs import TradingCosts
 from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
+
+from . import metrics
 
 
 @dataclass(frozen=True)
@@ -18,16 +20,36 @@ class BacktestResult:
     cagr: float
     mdd: float
     sharpe: float
+    sortino: float
+    profit_factor: float
+    win_rate: float
     trades_count: int
     start_date: str
     end_date: str
+    equity_curve: list[float] = field(default_factory=list)
+    trade_pnls: list[float] = field(default_factory=list)
 
 
 class BacktestEngine:
     """Run a basic long-only backtest from price data and discrete signals."""
 
-    def run(self, prices: pl.DataFrame, signals: pl.DataFrame) -> BacktestResult:
-        """Compute performance metrics. Fees and slippage are zero in MVP."""
+    def run(
+        self,
+        prices: pl.DataFrame,
+        signals: pl.DataFrame,
+        costs: TradingCosts | None = None,
+    ) -> BacktestResult:
+        """Compute performance metrics.
+
+        Costs are a proportional equity haircut on entry and exit
+        (``commission_rate + slippage_bps / 10_000``), not share-level fills.
+        Prior-bar signals are executed to avoid same-bar look-ahead.
+        """
+        trading_costs = costs or TradingCosts()
+        cost_rate = (
+            trading_costs.commission_rate + trading_costs.slippage_bps / 10_000.0
+        )
+
         merged = prices.join(signals.select(QP_DATE, "signal"), on=QP_DATE, how="inner")
         if merged.is_empty():
             raise ValueError("No overlapping dates between prices and signals")
@@ -41,6 +63,8 @@ class BacktestEngine:
         equity = 1.0
         equity_curve: list[float] = [equity]
         trades_count = 0
+        trade_pnls: list[float] = []
+        entry_equity: float | None = None
 
         for idx in range(1, len(closes)):
             # Execute prior-bar signals to avoid same-bar look-ahead.
@@ -48,9 +72,15 @@ class BacktestEngine:
             if sig == 1 and position == 0:
                 position = 1
                 trades_count += 1
+                equity *= 1.0 - cost_rate
+                entry_equity = equity
             elif sig == -1 and position == 1:
                 position = 0
                 trades_count += 1
+                equity *= 1.0 - cost_rate
+                if entry_equity is not None and entry_equity != 0:
+                    trade_pnls.append((equity / entry_equity) - 1.0)
+                entry_equity = None
 
             if position == 1 and closes[idx - 1] != 0:
                 equity *= closes[idx] / closes[idx - 1]
@@ -58,49 +88,17 @@ class BacktestEngine:
             equity_curve.append(equity)
 
         total_return = equity - 1.0
-        years = max((dates[-1] - dates[0]).days / 365.25, 1 / 365.25)
-        cagr = (equity ** (1 / years)) - 1.0 if equity > 0 else -1.0
-        mdd = _max_drawdown(equity_curve)
-        sharpe = _sharpe_ratio(equity_curve)
-
         return BacktestResult(
             total_return=total_return,
-            cagr=cagr,
-            mdd=mdd,
-            sharpe=sharpe,
+            cagr=metrics.cagr(equity, dates[0], dates[-1]),
+            mdd=metrics.max_drawdown(equity_curve),
+            sharpe=metrics.sharpe_ratio(equity_curve),
+            sortino=metrics.sortino_ratio(equity_curve),
+            profit_factor=metrics.profit_factor(trade_pnls),
+            win_rate=metrics.win_rate(trade_pnls),
             trades_count=trades_count,
             start_date=str(dates[0]),
             end_date=str(dates[-1]),
+            equity_curve=equity_curve,
+            trade_pnls=trade_pnls,
         )
-
-
-def _max_drawdown(equity_curve: list[float]) -> float:
-    peak = equity_curve[0]
-    max_dd = 0.0
-    for value in equity_curve:
-        peak = max(peak, value)
-        if peak > 0:
-            drawdown = (value / peak) - 1.0
-            max_dd = min(max_dd, drawdown)
-    return max_dd
-
-
-def _sharpe_ratio(equity_curve: list[float]) -> float:
-    if len(equity_curve) < 2:
-        return 0.0
-
-    returns = [
-        (equity_curve[i] / equity_curve[i - 1]) - 1.0
-        for i in range(1, len(equity_curve))
-        if equity_curve[i - 1] != 0
-    ]
-    if not returns:
-        return 0.0
-
-    mean_return = sum(returns) / len(returns)
-    variance = sum((r - mean_return) ** 2 for r in returns) / len(returns)
-    std_dev = math.sqrt(variance)
-    if std_dev == 0:
-        return 0.0
-
-    return (mean_return / std_dev) * math.sqrt(252)
