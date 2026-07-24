@@ -45,3 +45,43 @@ def test_both_strategies_run_on_same_engine(sample_prices: pl.DataFrame) -> None
 def test_rsi_reversion_rejects_invalid_thresholds() -> None:
     with pytest.raises(ValueError):
         RSIReversionStrategy(oversold=70.0, overbought=30.0)
+
+
+def test_rsi_reversion_emits_edge_triggered_events_only() -> None:
+    """Consecutive oversold/overbought bars should yield a single edge each."""
+    # Build closes so RSI stays below oversold then above overbought for several bars.
+    # Falling prices → oversold regime, then rising → overbought.
+    falling = [100.0 - i * 2.0 for i in range(25)]
+    rising = [falling[-1] + i * 4.0 for i in range(1, 26)]
+    closes = falling + rising
+    from datetime import date, timedelta
+
+    from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
+
+    prices = pl.DataFrame(
+        {
+            QP_DATE: [date(2024, 1, 1) + timedelta(days=i) for i in range(len(closes))],
+            QP_CLOSE: closes,
+        }
+    )
+    strategy = RSIReversionStrategy(window=5, oversold=40.0, overbought=60.0)
+    signals = strategy.run(prices)
+    buys = signals.filter(pl.col("signal") == 1)
+    sells = signals.filter(pl.col("signal") == -1)
+    assert buys.height >= 1
+    assert sells.height >= 1
+
+    # No two consecutive non-zero signals of the same sign (regime persistence → 0).
+    signal_list = signals["signal"].to_list()
+    for i in range(1, len(signal_list)):
+        if signal_list[i] != 0 and signal_list[i] == signal_list[i - 1]:
+            raise AssertionError(
+                f"repeated edge signal {signal_list[i]} at index {i}"
+            )
+
+    # While RSI remains in oversold after entry edge, further bars must be 0.
+    oversold_mask = signals["rsi"] < 40.0
+    oversold_signals = signals.filter(oversold_mask)["signal"].to_list()
+    assert oversold_signals.count(1) == 1
+    overbought_signals = signals.filter(signals["rsi"] > 60.0)["signal"].to_list()
+    assert overbought_signals.count(-1) == 1

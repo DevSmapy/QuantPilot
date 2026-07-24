@@ -113,6 +113,8 @@ def main() -> None:
             "mdd": f"{result.mdd:.2%}",
             "sharpe": f"{result.sharpe:.2f}",
             "sortino": f"{result.sortino:.2f}",
+            "profit_factor": f"{result.profit_factor:.2f}",
+            "win_rate": f"{result.win_rate:.2%}",
             "trades": result.trades_count,
         },
         summary=f"Long-only {strategy_label} backtest on {args.symbol}.",

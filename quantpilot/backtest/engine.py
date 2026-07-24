@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import polars as pl
@@ -49,6 +50,11 @@ class BacktestEngine:
         cost_rate = (
             trading_costs.commission_rate + trading_costs.slippage_bps / 10_000.0
         )
+        if not math.isfinite(cost_rate) or cost_rate >= 1.0:
+            raise ValueError(
+                "combined cost_rate must be finite and < 1 "
+                f"(got {cost_rate!r} from commission_rate + slippage_bps/1e4)"
+            )
 
         merged = prices.join(signals.select(QP_DATE, "signal"), on=QP_DATE, how="inner")
         if merged.is_empty():
@@ -64,7 +70,7 @@ class BacktestEngine:
         equity_curve: list[float] = [equity]
         trades_count = 0
         trade_pnls: list[float] = []
-        entry_equity: float | None = None
+        entry_basis: float | None = None
 
         for idx in range(1, len(closes)):
             # Execute prior-bar signals to avoid same-bar look-ahead.
@@ -72,15 +78,15 @@ class BacktestEngine:
             if sig == 1 and position == 0:
                 position = 1
                 trades_count += 1
+                entry_basis = equity
                 equity *= 1.0 - cost_rate
-                entry_equity = equity
             elif sig == -1 and position == 1:
                 position = 0
                 trades_count += 1
                 equity *= 1.0 - cost_rate
-                if entry_equity is not None and entry_equity != 0:
-                    trade_pnls.append((equity / entry_equity) - 1.0)
-                entry_equity = None
+                if entry_basis is not None and entry_basis != 0:
+                    trade_pnls.append((equity / entry_basis) - 1.0)
+                entry_basis = None
 
             if position == 1 and closes[idx - 1] != 0:
                 equity *= closes[idx] / closes[idx - 1]
