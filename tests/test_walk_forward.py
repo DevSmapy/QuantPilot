@@ -18,7 +18,7 @@ def test_walk_forward_produces_at_least_two_folds(sample_prices) -> None:
         step_bars=20,
     )
     assert len(folds) >= 2
-    assert folds[0].test_end < folds[1].test_start or folds[0].test_start < folds[1].test_start
+    assert folds[0].test_start < folds[1].test_start
     for fold in folds:
         assert fold.train_start <= fold.train_end
         assert fold.test_start <= fold.test_end
