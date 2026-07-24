@@ -2,8 +2,13 @@
 
 from quantpilot.environment.broker import PaperBroker
 from quantpilot.environment.clock import SimulationClock
-from quantpilot.environment.market import HistoricalMarket
-from quantpilot.environment.observation import AgentObservation, ObservationBuilder
+from quantpilot.environment.costs import TradingCosts
+from quantpilot.environment.market import HistoricalMarket, intersect_session_dates
+from quantpilot.environment.observation import (
+    AgentObservation,
+    ObservationBuilder,
+    SymbolView,
+)
 from quantpilot.environment.types import (
     Fill,
     FillResult,
@@ -23,4 +28,7 @@ __all__ = [
     "PortfolioSnapshot",
     "QueueResult",
     "SimulationClock",
+    "SymbolView",
+    "TradingCosts",
+    "intersect_session_dates",
 ]

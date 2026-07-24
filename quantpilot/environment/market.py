@@ -60,3 +60,16 @@ class HistoricalMarket:
             "close": float(row[QP_CLOSE]),
             "volume": float(row[QP_VOLUME]),
         }
+
+
+def intersect_session_dates(
+    markets: dict[str, HistoricalMarket],
+    start: date,
+    end: date,
+) -> list[date]:
+    """Return trading dates present in every market within [start, end]."""
+    if not markets:
+        raise ValueError("markets must not be empty")
+    date_sets = [set(market.session_dates(start, end)) for market in markets.values()]
+    common = set.intersection(*date_sets)
+    return sorted(common)

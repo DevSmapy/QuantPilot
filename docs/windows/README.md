@@ -1,6 +1,6 @@
 # Windows에서 QuantPilot 실행하기
 
-이 가이드는 **`main` 브랜치** 기준으로, Windows(PowerShell / Docker Desktop)에서 현재 사용 가능한 기능을 실행하는 방법을 정리합니다. Make가 없어도 따라 할 수 있습니다.
+이 가이드는 Windows(PowerShell / Docker Desktop)에서 현재 사용 가능한 기능을 실행하는 방법을 정리합니다. Make가 없어도 따라 할 수 있습니다.
 
 시뮬레이션 규칙·패키지 구조는 [`docs/agent/README.md`](../agent/README.md)를 참고하세요.
 
@@ -28,33 +28,27 @@ D:/path/to/Q-SEED/data/
 
 ---
 
-## `main`에서 사용 가능한 기능
+## 사용 가능한 기능
 
 | 기능 | 진입점 | 비고 |
 |------|--------|------|
 | MVP 데모 (전략 → 백테스트, AI 선택) | `scripts/run_mvp.py` | `--skip-ai`로 Ollama 없이 실행 가능 |
-| 에이전트 시뮬레이션 (단일 종목 CLI) | `scripts/run_agent_sim.py` | Hold / Ollama LLM |
+| 에이전트 시뮬레이션 (CLI) | `scripts/run_agent_sim.py` | Hold / Ollama, 다종목·수수료·슬리피지 |
+| Streamlit equity / 매매 마커 | `scripts/streamlit_agent_sim.py` | `uv sync --group viz` 필요 |
 | 단위 테스트·린트 | `pytest` / `ruff` / `black` / `mypy` | |
-
-**아직 `main`에 없음:** Streamlit UI, 다종목 유니버스, 수수료·슬리피지. 로컬에 `feat/build-Agent-mvp`가 있다면 그쪽에만 있습니다.
 
 ---
 
 ## 환경 변수 (`.env`)
 
-저장소 루트에서:
+Docker와 호스트 `uv`가 **같은 `.env`** 를 씁니다. `QSEED_HOST_PATH`만 Windows 절대 경로로 맞추면 됩니다.
 
 ```powershell
 Copy-Item .env.example .env
 notepad .env   # 또는 원하는 에디터
 ```
 
-경로 A(Docker)와 경로 B(호스트 `uv`)는 **`.env` 프로필이 다릅니다.** 전환할 때마다 아래 해당 블록으로 맞추세요.  
-특히 `OLLAMA_BASE_URL`을 호스트용(`localhost`)으로 둔 채 Docker 안에서 LLM을 돌리면 연결에 실패합니다. Compose는 `QSEED_DATA_PATH`만 `/data/qseed`로 덮어쓰고, Ollama URL은 `.env` 값을 그대로 씁니다.
-
-Windows 경로는 Compose·로컬 모두 **슬래시(`/`) 형태**를 권장합니다 (예: `D:/Users/User/Q-SEED/data`).
-
-### Docker Desktop용 (경로 A)
+권장 설정:
 
 ```env
 QSEED_HOST_PATH=D:/Users/User/Q-SEED/data
@@ -64,27 +58,21 @@ OLLAMA_MODEL=llama3.2
 DOCKER=1
 ```
 
-### 호스트 `uv`용 (경로 B)
+동작 요약:
 
-```env
-QSEED_DATA_PATH=D:/Users/User/Q-SEED/data
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2
-DOCKER=0
-```
+- **Docker Compose**: `QSEED_HOST_PATH`를 `/data/qseed`로 마운트하고, Ollama는 `http://ollama:11434`를 사용합니다.
+- **호스트 `uv run`**: `/data/qseed`가 없으면 `QSEED_HOST_PATH`로 자동 fallback하고, `http://ollama:11434`는 `http://localhost:11434`로 자동 변환됩니다.
+- Windows 경로는 **슬래시(`/`)** 형태를 권장합니다 (`D:/...`).
+- `host.docker.internal`은 **컨테이너 → 호스트**용입니다. 호스트 `uv`에서는 보통 자동 변환된 `localhost`를 쓰면 됩니다.
+- Docker Desktop에서 드라이브 문자 경로가 실패하면 따옴표(`"D:/..."`)를 시도하세요. 해당 드라이브 공유가 켜져 있어야 합니다.
 
-주의:
-
-- 기본 `.env.example`의 `QSEED_DATA_PATH=/data/qseed`, `OLLAMA_BASE_URL=http://ollama:11434`는 **컨테이너 기준**입니다. 호스트에서 `uv run`할 때 그대로 두면 데이터·Ollama를 찾지 못합니다.
-- `host.docker.internal`은 **컨테이너 → 호스트**용입니다. 호스트 `uv`에서는 `localhost`를 쓰세요.
-- Docker Desktop에서 드라이브 문자 경로가 실패하면 따옴표(`"D:/..."`)를 시도하세요. Docker Desktop 설정에서 해당 드라이브 공유가 켜져 있어야 합니다.
+로컬 전용으로 URL·경로를 직접 고정하려면 `.env.example` 하단 optional overrides를 참고하세요. 보통은 필요 없습니다.
 
 ---
 
 ## 경로 A: Docker Desktop
 
-저장소 루트에서 PowerShell을 엽니다. Make 없이도 `docker compose`로 동일하게 동작합니다.  
-아래 명령 전에 `.env`가 **경로 A(Docker) 프로필**인지 확인하세요.
+저장소 루트에서 PowerShell을 엽니다. Make 없이도 `docker compose`로 동일하게 동작합니다.
 
 ### 1) Bundled Ollama + 개발 컨테이너
 
@@ -109,7 +97,7 @@ docker network ls | Select-String quantpilot
 docker network connect quantpilot_default ollama
 ```
 
-컨테이너 이름이 `ollama`가 아니면 실제 이름으로 바꾸세요. `.env`는 `OLLAMA_BASE_URL=http://ollama:11434`(연결한 컨테이너가 네트워크에서 응답하는 이름)를 유지합니다.
+컨테이너 이름이 `ollama`가 아니면 실제 이름으로 바꾸세요.
 
 ### MVP 데모
 
@@ -149,7 +137,7 @@ docker compose --profile dev --profile bundled-ollama down
 uv sync
 ```
 
-`.env`를 **호스트용(경로 B)** 으로 맞춘 뒤:
+`.env`의 `QSEED_HOST_PATH`만 맞춰 두면 됩니다 (공유 `.env` 모델).
 
 ### MVP
 
@@ -169,6 +157,19 @@ uv run python scripts/run_agent_sim.py `
   --hold-only
 ```
 
+### 에이전트 — 다종목 + 비용
+
+```powershell
+uv run python scripts/run_agent_sim.py `
+  --symbols 005930.KS,000660.KS `
+  --start 2024-01-02 `
+  --target 12000000 `
+  --period-days 90 `
+  --commission-rate 0.00015 `
+  --slippage-bps 5 `
+  --hold-only
+```
+
 ### 에이전트 — LLM (호스트 Ollama)
 
 Ollama가 `http://localhost:11434`에서 응답하는지 확인한 뒤:
@@ -183,6 +184,13 @@ uv run python scripts/run_agent_sim.py `
   --decision-every 5 `
   --runs 1 `
   --model llama3.2
+```
+
+### Streamlit
+
+```powershell
+uv sync --group viz
+uv run streamlit run scripts/streamlit_agent_sim.py
 ```
 
 ---
@@ -219,11 +227,12 @@ uv run pytest -m integration
 | 증상 | 확인 |
 |------|------|
 | `QSEED_HOST_PATH` / compose 시작 실패 | `.env`에 절대 경로가 있는지, `D:/...` 형태·드라이브 공유 |
-| 로컬에서 데이터를 못 찾음 | `QSEED_DATA_PATH`가 Windows 실제 폴더인지. `/data/qseed`는 컨테이너 전용 |
-| Ollama 연결 거부 | `.env` 프로필 확인. 호스트 `uv` → `localhost`, Compose 내부 → `http://ollama:11434`. Docker인데 `localhost`로 두면 실패 |
+| 로컬에서 데이터를 못 찾음 | `QSEED_HOST_PATH`가 실제 폴더인지. `/data/qseed`만 두고 호스트 경로를 비우면 fallback 실패 |
+| Ollama 연결 거부 | Docker → `http://ollama:11434` + ollama 기동. 호스트 → localhost(자동 변환). 컨테이너인데 host-only URL을 강제로 넣지 않았는지 확인 |
 | `make` 명령 없음 | 이 문서의 `docker compose` / `uv run` 사용 |
 | `network connect` 실패 | 네트워크 이름(`docker network ls`), 컨테이너 이름 확인. Bundled는 `quantpilot-ollama`. 이미 연결됨 에러면 무시 |
 | `exec` 실패 (no container) | 먼저 §1/§2에서 `quantpilot-dev`를 `up` |
+| Streamlit / viz 패키지 없음 | `uv sync --group viz` |
 | 이미지와 호스트 코드 불일치 | `docker compose build quantpilot` 후 재실행 |
 | PowerShell에서 줄 이어쓰기 | bash의 `\` 대신 백틱 `` ` `` |
 
