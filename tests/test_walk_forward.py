@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 from datetime import date, timedelta
 
 import polars as pl
@@ -9,6 +10,11 @@ import pytest
 
 from quantpilot.backtest.walk_forward import run_walk_forward
 from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
+=======
+import pytest
+
+from quantpilot.backtest.walk_forward import run_walk_forward
+>>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
 from quantpilot.strategy.sma_cross import SMACrossStrategy
 
 
@@ -22,7 +28,11 @@ def test_walk_forward_produces_at_least_two_folds(sample_prices) -> None:
         step_bars=20,
     )
     assert len(folds) >= 2
+<<<<<<< HEAD
     assert folds[0].test_start < folds[1].test_start
+=======
+    assert folds[0].test_end < folds[1].test_start or folds[0].test_start < folds[1].test_start
+>>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
     for fold in folds:
         assert fold.train_start <= fold.train_end
         assert fold.test_start <= fold.test_end
@@ -40,6 +50,7 @@ def test_walk_forward_rejects_invalid_window_sizes(sample_prices) -> None:
             test_bars=10,
             step_bars=5,
         )
+<<<<<<< HEAD
 
 
 def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
@@ -81,3 +92,5 @@ def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
     assert warm_oos.filter(pl.col("signal") == 1).height >= cold.filter(
         pl.col("signal") == 1
     ).height
+=======
+>>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)

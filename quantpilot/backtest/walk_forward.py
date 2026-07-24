@@ -35,9 +35,14 @@ def run_walk_forward(
 ) -> list[WalkForwardFold]:
     """Run fixed-parameter rolling OOS backtests.
 
+<<<<<<< HEAD
     Signals are generated on train+test context so indicators warm up on
     pre-test history, then only test-period signals are backtested. Train
     dates remain metadata (no in-sample optimization).
+=======
+    Each fold records a train date range for documentation only. Signals and
+    the backtest run solely on the test slice (no in-sample optimization).
+>>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
     """
     if train_bars < 1 or test_bars < 1 or step_bars < 1:
         raise ValueError("train_bars, test_bars, and step_bars must be >= 1")
@@ -56,11 +61,16 @@ def run_walk_forward(
 
         train_slice = frame.slice(start, train_bars)
         test_slice = frame.slice(train_end, test_bars)
+<<<<<<< HEAD
         context = pl.concat([train_slice, test_slice], how="vertical")
         context_signals = strategy.run(context)
         test_start_date = test_slice[QP_DATE][0]
         test_signals = context_signals.filter(pl.col(QP_DATE) >= test_start_date)
         result = engine.run(test_slice, test_signals, costs=costs)
+=======
+        signals = strategy.run(test_slice)
+        result = engine.run(test_slice, signals, costs=costs)
+>>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
 
         train_dates = train_slice[QP_DATE].to_list()
         test_dates = test_slice[QP_DATE].to_list()
