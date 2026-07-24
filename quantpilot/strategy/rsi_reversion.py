@@ -42,6 +42,7 @@ class RSIReversionStrategy:
         rsi_values = rsi(frame[QP_CLOSE], self.window)
         with_rsi = frame.with_columns(rsi_values.alias("rsi"))
 
+<<<<<<< HEAD
         return (
             with_rsi.with_columns(
                 pl.when(pl.col("rsi") < self.oversold)
@@ -77,3 +78,13 @@ class RSIReversionStrategy:
             ).select(QP_DATE, "signal", "rsi", QP_CLOSE)
 >>>>>>> 6148b96 (feat(strategy): Protocol + RSI reversion)
         )
+=======
+        return with_rsi.with_columns(
+            pl.when(pl.col("rsi") < self.oversold)
+            .then(1)
+            .when(pl.col("rsi") > self.overbought)
+            .then(-1)
+            .otherwise(0)
+            .alias("signal")
+        ).select(QP_DATE, "signal", "rsi", QP_CLOSE)
+>>>>>>> 39ae0ff (fix(analysis-quant): satisfy mypy and ruff on new modules)

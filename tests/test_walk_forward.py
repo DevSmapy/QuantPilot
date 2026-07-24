@@ -29,10 +29,14 @@ def test_walk_forward_produces_at_least_two_folds(sample_prices) -> None:
     )
     assert len(folds) >= 2
 <<<<<<< HEAD
+<<<<<<< HEAD
     assert folds[0].test_start < folds[1].test_start
 =======
     assert folds[0].test_end < folds[1].test_start or folds[0].test_start < folds[1].test_start
 >>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
+=======
+    assert folds[0].test_start < folds[1].test_start
+>>>>>>> 39ae0ff (fix(analysis-quant): satisfy mypy and ruff on new modules)
     for fold in folds:
         assert fold.train_start <= fold.train_end
         assert fold.test_start <= fold.test_end
