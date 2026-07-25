@@ -81,7 +81,10 @@ def build_strategy(name: str) -> tuple[Strategy, str, dict[str, Any]]:
     strategy = RSIReversionStrategy()
     return (
         strategy,
-        "RSI Reversion (14, 30/70)",
+        (
+            f"RSI Reversion ({strategy.window}, "
+            f"{strategy.oversold:g}/{strategy.overbought:g})"
+        ),
         {
             "window": strategy.window,
             "oversold": strategy.oversold,
@@ -165,16 +168,8 @@ def main() -> None:
             "mdd": f"{result.mdd:.2%}",
             "sharpe": f"{result.sharpe:.2f}",
             "sortino": f"{result.sortino:.2f}",
-<<<<<<< HEAD
-<<<<<<< HEAD
             "profit_factor": f"{result.profit_factor:.2f}",
             "win_rate": f"{result.win_rate:.2%}",
-=======
->>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
-=======
-            "profit_factor": f"{result.profit_factor:.2f}",
-            "win_rate": f"{result.win_rate:.2%}",
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
             "trades": result.trades_count,
         },
         summary=f"Long-only {strategy_label} backtest on {args.symbol}.",

@@ -9,15 +9,7 @@ later split targets are listed in [`PLAN.md`](PLAN.md).
 
 ## Pipeline
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ```text
-=======
-```
->>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
-=======
-```text
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 DataSourceManager.get_price
         ↓
 Strategy.run  →  signal ∈ {-1, 0, 1}
@@ -31,17 +23,8 @@ AnalysisBrief JSON  →  later: LLM prompt context
 ```
 
 Optional: `run_walk_forward` rolls fixed-parameter out-of-sample windows
-<<<<<<< HEAD
-<<<<<<< HEAD
 (train dates are metadata only; no optimization). Signals use train+test
 context for indicator warm-up, then only the test period is backtested.
-=======
-(train dates are metadata only; no optimization).
->>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
-=======
-(train dates are metadata only; no optimization). Signals use train+test
-context for indicator warm-up, then only the test period is backtested.
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
 ## Signal contract
 
@@ -68,53 +51,8 @@ This is not share-level fill simulation (see agent `PaperBroker` for that).
 
 | CLI `--strategy` | Class | Notes |
 |------------------|-------|-------|
-<<<<<<< HEAD
-<<<<<<< HEAD
-| `sma_cross` | `SMACrossStrategy` | fast/slow SMA cross events (uses `indicators.sma`) |
-<<<<<<< HEAD
-| `rsi_reversion` | `RSIReversionStrategy` | Edge into oversold (`1`) / overbought (`-1`); hold while regime persists |
-=======
-| `rsi_reversion` | `RSIReversionStrategy` | RSI &lt; 30 enter, RSI &gt; 70 exit |
->>>>>>> 74fa7f9 (docs(analysis-quant): CLI flags and local Q-SEED checklist)
-=======
-| `sma_cross` | `SMACrossStrategy` | fast/slow SMA **crossover events** (uses `indicators.sma`) |
-| `rsi_reversion` | `RSIReversionStrategy` | RSI &lt; 30 → `1`, RSI &gt; 70 → `-1` **for every bar in zone** |
-
-`RSIReversionStrategy` is zone-level, not crossover-only: it emits `1`/`-1` on
-every bar that remains oversold/overbought. Combined with the engine’s
-flat/long gate, many RSI signal bars produce no new trade.
-
-## Metrics notes
-
-- `trades_count` increments on **each entry and each exit** (two increments per
-  completed round-trip).
-- `trade_pnls`, `win_rate`, and `profit_factor` use **completed round-trips
-  only**. An open long at the end of the series is excluded from PF / win rate
-  (and does not append to `trade_pnls`).
-
-## Walk-forward notes
-
-`run_walk_forward` runs `strategy.run` on the **test slice only**. Train date
-ranges are recorded as metadata (no parameter optimization, no warm-up history
-passed into the strategy). Long indicator windows (e.g. SMA 60) are therefore
-**cold at the start of each fold**. Warm-up across the train/test boundary is
-out of scope for this MVP+.
-
-## Known limitations (review)
-
-1. **RSI signals ≠ fills** — zone-level `1`/`-1` every bar in oversold/overbought;
-   engine enters only when flat / exits only when long.
-2. **Walk-forward cold start** — indicators computed on the test slice alone;
-   train bars are metadata only.
-3. **`trades_count` vs PF/win rate** — count includes entries+exits; PF/win rate
-   use completed round-trip `trade_pnls` only (open end positions excluded).
-4. **Costs are haircuts** — proportional equity haircut, not `PaperBroker`
-   share fills.
->>>>>>> 31be82b (docs(analysis-quant): document RSI, walk-forward, and metrics limits (#10))
-=======
 | `sma_cross` | `SMACrossStrategy` | fast/slow SMA cross events (uses `indicators.sma`) |
 | `rsi_reversion` | `RSIReversionStrategy` | Edge into oversold (`1`) / overbought (`-1`); hold while regime persists |
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
 ## Cloud vs local testing
 

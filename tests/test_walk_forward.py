@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 from datetime import date, timedelta
 
 import polars as pl
@@ -13,14 +9,6 @@ import pytest
 
 from quantpilot.backtest.walk_forward import run_walk_forward
 from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE
-<<<<<<< HEAD
-=======
-import pytest
-
-from quantpilot.backtest.walk_forward import run_walk_forward
->>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
-=======
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 from quantpilot.strategy.sma_cross import SMACrossStrategy
 
 
@@ -34,15 +22,7 @@ def test_walk_forward_produces_at_least_two_folds(sample_prices) -> None:
         step_bars=20,
     )
     assert len(folds) >= 2
-<<<<<<< HEAD
-<<<<<<< HEAD
     assert folds[0].test_start < folds[1].test_start
-=======
-    assert folds[0].test_end < folds[1].test_start or folds[0].test_start < folds[1].test_start
->>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
-=======
-    assert folds[0].test_start < folds[1].test_start
->>>>>>> 39ae0ff (fix(analysis-quant): satisfy mypy and ruff on new modules)
     for fold in folds:
         assert fold.train_start <= fold.train_end
         assert fold.test_start <= fold.test_end
@@ -60,10 +40,6 @@ def test_walk_forward_rejects_invalid_window_sizes(sample_prices) -> None:
             test_bars=10,
             step_bars=5,
         )
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
 
 def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
@@ -100,16 +76,6 @@ def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
     # Cold start on test-only would miss the early cross relative to warmed signals.
     cold = strategy.run(prices.slice(30, 20))
     warm_oos = strategy.run(prices).filter(pl.col(QP_DATE) >= folds[0].test_start)
-<<<<<<< HEAD
-    assert warm_oos.filter(pl.col("signal") == 1).height >= cold.filter(
-        pl.col("signal") == 1
-    ).height
-<<<<<<< HEAD
-=======
->>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
-=======
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
-=======
     assert (
         warm_oos.filter(pl.col("signal") == 1).height
         >= cold.filter(pl.col("signal") == 1).height
@@ -144,4 +110,3 @@ def test_walk_forward_continuity_can_trade_on_first_oos_bar() -> None:
     assert len(folds) >= 1
     assert folds[0].result.equity_curve[0] == pytest.approx(1.0)
     assert len(folds[0].result.equity_curve) == 12
->>>>>>> 68def49 (fix(analysis-quant): address code review findings)

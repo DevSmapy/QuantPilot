@@ -70,15 +70,7 @@ def cagr(equity: float, start: date, end: date) -> float:
     years = max((end - start).days / 365.25, 1 / 365.25)
     if equity <= 0:
         return -1.0
-<<<<<<< HEAD
-<<<<<<< HEAD
     return float((equity ** (1 / years)) - 1.0)
-=======
-    return (equity ** (1 / years)) - 1.0
->>>>>>> f860d31 (feat(backtest): metrics, richer result, TradingCosts)
-=======
-    return float((equity ** (1 / years)) - 1.0)
->>>>>>> 39ae0ff (fix(analysis-quant): satisfy mypy and ruff on new modules)
 
 
 def profit_factor(trade_pnls: list[float]) -> float:

@@ -56,6 +56,21 @@ def _filter_symbol(prices: pl.DataFrame, symbol: str) -> pl.DataFrame:
     return filtered
 
 
+def _filter_signals_for_symbol(signals: pl.DataFrame, symbol: str) -> pl.DataFrame:
+    """Scope signals to ``symbol`` when a symbol column exists.
+
+    Strategy signal frames are usually date/signal only (no ``QP_SYMBOL``);
+    in that case the frame is returned unchanged because prices are already
+    symbol-filtered upstream.
+    """
+    if QP_SYMBOL not in signals.columns:
+        return signals
+    filtered = signals.filter(pl.col(QP_SYMBOL) == symbol)
+    if filtered.is_empty():
+        raise ValueError(f"signals contain no rows for symbol {symbol!r}")
+    return filtered
+
+
 def _indicators_at_as_of(prices: pl.DataFrame, as_of: date) -> dict[str, float | None]:
     visible = prices.filter(pl.col(QP_DATE) <= as_of).sort(QP_DATE)
     empty: dict[str, float | None] = {
@@ -124,7 +139,15 @@ def _truncate_result_to_as_of(
     as_of: date,
     costs: TradingCosts | None,
 ) -> BacktestResult:
-    """Return a BacktestResult whose window ends at ``as_of`` (inclusive)."""
+    """Return a BacktestResult whose window ends at ``as_of`` (inclusive).
+
+    When ``as_of`` is before ``result.end_date``, the truncated window is
+    re-run through ``BacktestEngine``. ``BacktestResult`` does not store the
+    ``TradingCosts`` used to produce ``result``, so callers **must** pass the
+    same ``costs`` that produced ``result``; otherwise metrics diverge from
+    the original run. Passing ``costs=None`` preserves the engine default
+    (zero costs) only when the original backtest also used defaults.
+    """
     end_d = _as_of_date(result.end_date)
     start_d = _as_of_date(result.start_date)
     if as_of < start_d or as_of > end_d:
@@ -157,6 +180,17 @@ def build_analysis_brief(
     When ``as_of`` is before ``result.end_date``, metrics / monthly returns /
     window are recomputed from a truncated backtest through ``as_of`` so the
     brief never embeds future performance.
+
+    ``costs`` is forwarded to that re-run. Because ``BacktestResult`` does not
+    embed trading costs, pass the same ``TradingCosts`` used to build
+    ``result`` whenever truncation may occur. Storing costs on
+    ``BacktestResult`` is intentionally out of scope; document and pass them
+    at the call site instead.
+
+    If ``signals`` includes ``QP_SYMBOL``, rows are filtered to the resolved
+    symbol before truncation and signal summary. Date/signal-only frames
+    (the usual strategy output) are left unchanged; prices are already
+    symbol-scoped.
     """
     if QP_DATE not in prices.columns or QP_CLOSE not in prices.columns:
         raise ValueError(f"prices must contain '{QP_DATE}' and '{QP_CLOSE}'")
@@ -165,10 +199,11 @@ def build_analysis_brief(
 
     resolved_symbol = _resolve_symbol(prices, symbol)
     prices_sym = _filter_symbol(prices, resolved_symbol)
+    signals_sym = _filter_signals_for_symbol(signals, resolved_symbol)
     as_of_d = _as_of_date(as_of if as_of is not None else result.end_date)
     scoped = _truncate_result_to_as_of(
         prices=prices_sym,
-        signals=signals,
+        signals=signals_sym,
         result=result,
         as_of=as_of_d,
         costs=costs,
@@ -215,7 +250,7 @@ def build_analysis_brief(
         ),
         metrics=metrics,
         indicators_snapshot=snapshot,
-        signals_summary=_signals_summary(signals, as_of_d),
+        signals_summary=_signals_summary(signals_sym, as_of_d),
         monthly_returns=monthly,
         notes=tuple(brief_notes),
     )

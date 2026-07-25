@@ -2,14 +2,7 @@
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 import math
-=======
->>>>>>> f860d31 (feat(backtest): metrics, richer result, TradingCosts)
-=======
-import math
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 from dataclasses import dataclass, field
 
 import polars as pl
@@ -58,20 +51,11 @@ class BacktestEngine:
         cost_rate = (
             trading_costs.commission_rate + trading_costs.slippage_bps / 10_000.0
         )
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
         if not math.isfinite(cost_rate) or cost_rate >= 1.0:
             raise ValueError(
                 "combined cost_rate must be finite and < 1 "
                 f"(got {cost_rate!r} from commission_rate + slippage_bps/1e4)"
             )
-<<<<<<< HEAD
-=======
->>>>>>> f860d31 (feat(backtest): metrics, richer result, TradingCosts)
-=======
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
         merged = prices.join(signals.select(QP_DATE, "signal"), on=QP_DATE, how="inner")
         if merged.is_empty():
@@ -87,15 +71,7 @@ class BacktestEngine:
         equity_curve: list[float] = [equity]
         trades_count = 0
         trade_pnls: list[float] = []
-<<<<<<< HEAD
-<<<<<<< HEAD
         entry_basis: float | None = None
-=======
-        entry_equity: float | None = None
->>>>>>> f860d31 (feat(backtest): metrics, richer result, TradingCosts)
-=======
-        entry_basis: float | None = None
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
         for idx in range(1, len(closes)):
             # Execute prior-bar signals to avoid same-bar look-ahead.
@@ -103,37 +79,15 @@ class BacktestEngine:
             if sig == 1 and position == 0:
                 position = 1
                 trades_count += 1
-<<<<<<< HEAD
-<<<<<<< HEAD
                 entry_basis = equity
                 equity *= 1.0 - cost_rate
-=======
-                equity *= 1.0 - cost_rate
-                entry_equity = equity
->>>>>>> f860d31 (feat(backtest): metrics, richer result, TradingCosts)
-=======
-                entry_basis = equity
-                equity *= 1.0 - cost_rate
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
             elif sig == -1 and position == 1:
                 position = 0
                 trades_count += 1
                 equity *= 1.0 - cost_rate
-<<<<<<< HEAD
-<<<<<<< HEAD
                 if entry_basis is not None and entry_basis != 0:
                     trade_pnls.append((equity / entry_basis) - 1.0)
                 entry_basis = None
-=======
-                if entry_equity is not None and entry_equity != 0:
-                    trade_pnls.append((equity / entry_equity) - 1.0)
-                entry_equity = None
->>>>>>> f860d31 (feat(backtest): metrics, richer result, TradingCosts)
-=======
-                if entry_basis is not None and entry_basis != 0:
-                    trade_pnls.append((equity / entry_basis) - 1.0)
-                entry_basis = None
->>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
 
             if position == 1 and closes[idx - 1] != 0:
                 equity *= closes[idx] / closes[idx - 1]
