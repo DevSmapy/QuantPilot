@@ -18,9 +18,19 @@ from quantpilot.analysis.brief import (
     json_safe_float,
 )
 from quantpilot.backtest.engine import BacktestResult
+from quantpilot.indicators.atr import atr
+from quantpilot.indicators.bollinger import bollinger
+from quantpilot.indicators.ema import ema
+from quantpilot.indicators.macd import macd
 from quantpilot.indicators.rsi import rsi
 from quantpilot.indicators.sma import sma
-from quantpilot.providers.qseed_schema import QP_CLOSE, QP_DATE, QP_SYMBOL
+from quantpilot.providers.qseed_schema import (
+    QP_CLOSE,
+    QP_DATE,
+    QP_HIGH,
+    QP_LOW,
+    QP_SYMBOL,
+)
 
 
 def _as_of_date(value: date | str) -> date:
@@ -46,14 +56,36 @@ def _last_finite(series: pl.Series) -> float | None:
 
 def _indicators_at_as_of(prices: pl.DataFrame, as_of: date) -> dict[str, float | None]:
     visible = prices.filter(pl.col(QP_DATE) <= as_of).sort(QP_DATE)
+    empty: dict[str, float | None] = {
+        "sma_20": None,
+        "sma_60": None,
+        "rsi_14": None,
+        "ema_20": None,
+        "macd": None,
+        "macd_signal": None,
+        "bb_mid": None,
+        "atr_14": None,
+    }
     if visible.is_empty():
-        return {"sma_20": None, "sma_60": None, "rsi_14": None}
+        return empty
     closes = visible[QP_CLOSE].cast(pl.Float64)
-    return {
+    macd_frame = macd(closes)
+    bb = bollinger(closes)
+    snapshot: dict[str, float | None] = {
         "sma_20": _last_finite(sma(closes, 20)),
         "sma_60": _last_finite(sma(closes, 60)),
         "rsi_14": _last_finite(rsi(closes, 14)),
+        "ema_20": _last_finite(ema(closes, 20)),
+        "macd": _last_finite(macd_frame["macd"]),
+        "macd_signal": _last_finite(macd_frame["signal"]),
+        "bb_mid": _last_finite(bb["mid"]),
+        "atr_14": None,
     }
+    if QP_HIGH in visible.columns and QP_LOW in visible.columns:
+        snapshot["atr_14"] = _last_finite(
+            atr(visible[QP_HIGH], visible[QP_LOW], closes, 14)
+        )
+    return snapshot
 
 
 def _signals_summary(signals: pl.DataFrame, as_of: date) -> AnalysisBriefSignalsSummary:
