@@ -73,7 +73,10 @@ def build_strategy(name: str) -> tuple[Strategy, str, dict[str, Any]]:
         return (
             strategy,
             "SMA Cross (20/60)",
-            {"fast": strategy.fast_window, "slow": strategy.slow_window},
+            {
+                "fast_window": strategy.fast_window,
+                "slow_window": strategy.slow_window,
+            },
         )
     strategy = RSIReversionStrategy()
     return (
@@ -135,6 +138,7 @@ def main() -> None:
             strategy_name=args.strategy,
             strategy_params=strategy_params,
             symbol=args.symbol,
+            costs=costs,
         )
         payload = brief.to_json()
         if args.emit_brief in ("-", ""):

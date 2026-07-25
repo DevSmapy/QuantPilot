@@ -100,23 +100,35 @@ def win_rate(trade_pnls: list[float]) -> float:
     return wins / len(trade_pnls)
 
 
+def _parse_year_month(key: str) -> tuple[int, int]:
+    year_s, month_s = key.split("-", maxsplit=1)
+    return int(year_s), int(month_s)
+
+
+def _month_delta(prev: tuple[int, int], curr: tuple[int, int]) -> int:
+    return (curr[0] - prev[0]) * 12 + (curr[1] - prev[1])
+
+
 def monthly_returns(
     dates: list[date],
     equity_curve: list[float],
 ) -> dict[str, float]:
     """Calendar-month simple returns from month-end equity levels.
 
-    Groups by YYYY-MM using the last equity observation in each month, then
-    returns ``(e_m / e_{m-1}) - 1`` keyed by the later month label. The first
-    month is omitted (no prior month-end baseline).
+    Sorts by date, groups by YYYY-MM using the last equity observation in each
+    month, then returns ``(e_m / e_{m-1}) - 1`` keyed by the later month label
+    **only when months are consecutive**. Gaps (e.g. missing February) are
+    skipped so a multi-month move is never labeled as a single month. The first
+    observed month is omitted (no prior month-end baseline).
     """
     if len(dates) != len(equity_curve):
         raise ValueError("dates and equity_curve must have the same length")
     if not dates:
         return {}
 
+    ordered = sorted(zip(dates, equity_curve, strict=True), key=lambda row: row[0])
     month_end: dict[str, float] = {}
-    for d, equity in zip(dates, equity_curve, strict=True):
+    for d, equity in ordered:
         key = f"{d.year:04d}-{d.month:02d}"
         month_end[key] = float(equity)
 
@@ -126,9 +138,40 @@ def monthly_returns(
 
     out: dict[str, float] = {}
     for i in range(1, len(keys)):
-        prev = month_end[keys[i - 1]]
-        curr = month_end[keys[i]]
+        prev_key = keys[i - 1]
+        curr_key = keys[i]
+        if _month_delta(_parse_year_month(prev_key), _parse_year_month(curr_key)) != 1:
+            continue
+        prev = month_end[prev_key]
+        curr = month_end[curr_key]
         if prev == 0:
             continue
-        out[keys[i]] = (curr / prev) - 1.0
+        out[curr_key] = (curr / prev) - 1.0
     return out
+
+
+def metrics_from_equity(
+    dates: list[date],
+    equity_curve: list[float],
+    *,
+    trade_pnls: list[float] | None = None,
+    trades_count: int | None = None,
+) -> dict[str, float | int | dict[str, float]]:
+    """Build the standard metric bundle from a dated equity curve."""
+    if not dates or not equity_curve:
+        raise ValueError("dates and equity_curve must be non-empty")
+    if len(dates) != len(equity_curve):
+        raise ValueError("dates and equity_curve must have the same length")
+    pnls = list(trade_pnls or [])
+    equity = equity_curve[-1]
+    return {
+        "total_return": equity - 1.0,
+        "cagr": cagr(equity, dates[0], dates[-1]),
+        "mdd": max_drawdown(equity_curve),
+        "sharpe": sharpe_ratio(equity_curve),
+        "sortino": sortino_ratio(equity_curve),
+        "profit_factor": profit_factor(pnls),
+        "win_rate": win_rate(pnls),
+        "trades_count": int(trades_count if trades_count is not None else 0),
+        "monthly_returns": monthly_returns(dates, equity_curve),
+    }

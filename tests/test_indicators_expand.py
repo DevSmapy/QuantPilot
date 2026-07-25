@@ -59,6 +59,26 @@ def test_atr_non_negative(sample_prices: pl.DataFrame) -> None:
     assert float(values[-1]) >= 0.0
 
 
+def test_atr_uses_wilder_not_sma_of_tr() -> None:
+    high = pl.Series("high", [10.0, 11.0, 12.0, 13.0, 14.0, 15.0])
+    low = pl.Series("low", [9.0, 10.0, 11.0, 12.0, 13.0, 14.0])
+    close = pl.Series("close", [9.5, 10.5, 11.5, 12.5, 13.5, 14.5])
+    wilder = atr(high, low, close, window=3)
+    frame = pl.DataFrame({"high": high, "low": low, "close": close}).with_columns(
+        pl.col("close").shift(1).alias("prev_close")
+    )
+    sma_tr = frame.select(
+        pl.max_horizontal(
+            pl.col("high") - pl.col("low"),
+            (pl.col("high") - pl.col("prev_close")).abs(),
+            (pl.col("low") - pl.col("prev_close")).abs(),
+        )
+        .rolling_mean(window_size=3)
+        .alias("sma_tr")
+    )["sma_tr"]
+    assert float(wilder[-1]) != pytest.approx(float(sma_tr[-1]))
+
+
 def test_atr_rejects_length_mismatch() -> None:
     with pytest.raises(ValueError, match="same length"):
         atr(pl.Series([1.0, 2.0]), pl.Series([1.0]), pl.Series([1.0, 2.0]))

@@ -33,3 +33,15 @@ def test_run_param_grid_rejects_empty(sample_prices: pl.DataFrame) -> None:
             strategy_factory=SMACrossStrategy,
             param_grid=[],
         )
+
+
+def test_run_param_grid_accepts_rsi_factory(sample_prices: pl.DataFrame) -> None:
+    from quantpilot.strategy.rsi_reversion import RSIReversionStrategy
+
+    rows = run_param_grid(
+        sample_prices,
+        strategy_factory=RSIReversionStrategy,
+        param_grid=[{"window": 5, "oversold": 40.0, "overbought": 60.0}],
+    )
+    assert len(rows) == 1
+    assert rows[0].params["window"] == 5

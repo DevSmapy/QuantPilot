@@ -33,6 +33,11 @@ def run_param_grid(
     ``strategy_factory`` is called as ``strategy_factory(**params)`` for each
     mapping in ``param_grid``. This is an exhaustive fixed grid, not a search
     or optimizer.
+
+    **Overfitting warning:** results are **full-sample** on ``prices``. Do not
+    pick the best row here and feed those params into ``run_walk_forward`` as
+    if they were out-of-sample. For OOS selection, grid only inside each fold's
+    train window (nested) and evaluate on that fold's test slice.
     """
     if not param_grid:
         raise ValueError("param_grid must not be empty")

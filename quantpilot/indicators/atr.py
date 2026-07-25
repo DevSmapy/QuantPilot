@@ -1,4 +1,4 @@
-"""Average True Range indicator."""
+"""Average True Range indicator (Wilder)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,12 @@ def atr(
     close: pl.Series,
     window: int = 14,
 ) -> pl.Series:
-    """Calculate Average True Range from high/low/close series."""
+    """Wilder Average True Range from high/low/close series.
+
+    True range is smoothed with Wilder's RMA (``alpha = 1 / window``,
+    ``adjust=False``), matching common charting platforms more closely than
+    a simple moving average of TR.
+    """
     if window < 1:
         raise ValueError("window must be >= 1")
     if not (high.len() == low.len() == close.len()):
@@ -33,4 +38,4 @@ def atr(
         ).alias("tr")
     )["tr"]
 
-    return true_range.rolling_mean(window_size=window)
+    return true_range.ewm_mean(alpha=1.0 / float(window), adjust=False)

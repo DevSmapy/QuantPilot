@@ -41,3 +41,10 @@ def test_rolling_volatility_annualized(sample_prices: pl.DataFrame) -> None:
 def test_rolling_volatility_rejects_invalid_window() -> None:
     with pytest.raises(ValueError):
         rolling_volatility(pl.Series([1.0, 2.0]), window=0)
+
+
+def test_returns_reject_non_positive_prices() -> None:
+    with pytest.raises(ValueError, match="positive"):
+        simple_returns(pl.Series([100.0, 0.0, 110.0]))
+    with pytest.raises(ValueError, match="positive"):
+        log_returns(pl.Series([100.0, -1.0]))

@@ -84,8 +84,11 @@ working on this branch.
 **Metrics:** MDD `<= 0`; Sharpe/Sortino annualized with `√252`; PF from
 completed round-trip `trade_pnls`.
 
-**AnalysisBrief:** flat JSON for LLM context; `as_of` is look-ahead-safe (backtest
-end or a specified date); indicator snapshot values are as-of only (no future).
+**AnalysisBrief:** flat JSON for LLM context. When ``as_of`` is before the
+backtest end, metrics / monthly returns / window are recomputed on data through
+``as_of`` (no future performance). Indicator snapshots are as-of only.
+``monthly_returns`` only emits consecutive calendar months (gaps skipped).
+``atr_14`` uses Wilder RMA.
 
 ---
 

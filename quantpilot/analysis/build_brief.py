@@ -17,7 +17,8 @@ from quantpilot.analysis.brief import (
     AnalysisBriefWindow,
     json_safe_float,
 )
-from quantpilot.backtest.engine import BacktestResult
+from quantpilot.backtest.engine import BacktestEngine, BacktestResult
+from quantpilot.environment.costs import TradingCosts
 from quantpilot.indicators.atr import atr
 from quantpilot.indicators.bollinger import bollinger
 from quantpilot.indicators.ema import ema
@@ -43,15 +44,16 @@ def _last_finite(series: pl.Series) -> float | None:
     if series.len() == 0:
         return None
     value = series[-1]
-    if value is None:
-        return None
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return None
-    if f != f:  # NaN
-        return None
-    return f
+    return json_safe_float(value if value is None else float(value))
+
+
+def _filter_symbol(prices: pl.DataFrame, symbol: str) -> pl.DataFrame:
+    if QP_SYMBOL not in prices.columns:
+        return prices
+    filtered = prices.filter(pl.col(QP_SYMBOL) == symbol)
+    if filtered.is_empty():
+        raise ValueError(f"prices contain no rows for symbol {symbol!r}")
+    return filtered
 
 
 def _indicators_at_as_of(prices: pl.DataFrame, as_of: date) -> dict[str, float | None]:
@@ -107,8 +109,35 @@ def _resolve_symbol(prices: pl.DataFrame, symbol: str | None) -> str:
     if symbol is not None:
         return symbol
     if QP_SYMBOL in prices.columns and prices.height > 0:
-        return str(prices[QP_SYMBOL][0])
+        symbols = prices[QP_SYMBOL].unique().to_list()
+        if len(symbols) > 1:
+            raise ValueError("prices contain multiple symbols; pass symbol= explicitly")
+        return str(symbols[0])
     return "UNKNOWN"
+
+
+def _truncate_result_to_as_of(
+    *,
+    prices: pl.DataFrame,
+    signals: pl.DataFrame,
+    result: BacktestResult,
+    as_of: date,
+    costs: TradingCosts | None,
+) -> BacktestResult:
+    """Return a BacktestResult whose window ends at ``as_of`` (inclusive)."""
+    end_d = _as_of_date(result.end_date)
+    start_d = _as_of_date(result.start_date)
+    if as_of < start_d or as_of > end_d:
+        raise ValueError(
+            f"as_of {as_of.isoformat()} is outside backtest window "
+            f"{result.start_date} .. {result.end_date}"
+        )
+    if as_of == end_d:
+        return result
+
+    cut_prices = prices.filter(pl.col(QP_DATE) <= as_of)
+    cut_signals = signals.filter(pl.col(QP_DATE) <= as_of)
+    return BacktestEngine().run(cut_prices, cut_signals, costs=costs)
 
 
 def build_analysis_brief(
@@ -120,43 +149,73 @@ def build_analysis_brief(
     strategy_params: dict[str, Any] | None = None,
     symbol: str | None = None,
     as_of: date | str | None = None,
-    notes: list[str] | None = None,
+    notes: list[str] | tuple[str, ...] | None = None,
+    costs: TradingCosts | None = None,
 ) -> AnalysisBrief:
-    """Assemble a look-ahead-safe AnalysisBrief from a completed backtest."""
+    """Assemble a look-ahead-safe AnalysisBrief from a completed backtest.
+
+    When ``as_of`` is before ``result.end_date``, metrics / monthly returns /
+    window are recomputed from a truncated backtest through ``as_of`` so the
+    brief never embeds future performance.
+    """
     if QP_DATE not in prices.columns or QP_CLOSE not in prices.columns:
         raise ValueError(f"prices must contain '{QP_DATE}' and '{QP_CLOSE}'")
     if QP_DATE not in signals.columns or "signal" not in signals.columns:
         raise ValueError("signals must contain 'date' and 'signal'")
 
+    resolved_symbol = _resolve_symbol(prices, symbol)
+    prices_sym = _filter_symbol(prices, resolved_symbol)
     as_of_d = _as_of_date(as_of if as_of is not None else result.end_date)
-    pf = json_safe_float(result.profit_factor)
-    brief_notes = list(notes) if notes is not None else list(DEFAULT_BRIEF_NOTES)
-    if pf is None and result.profit_factor == float("inf"):
+    scoped = _truncate_result_to_as_of(
+        prices=prices_sym,
+        signals=signals,
+        result=result,
+        as_of=as_of_d,
+        costs=costs,
+    )
+
+    pf = json_safe_float(scoped.profit_factor)
+    brief_notes: list[str] = (
+        list(notes) if notes is not None else list(DEFAULT_BRIEF_NOTES)
+    )
+    if pf is None and scoped.profit_factor == float("inf"):
         brief_notes.append(
             "profit_factor was infinite (no losing trades); emitted as null."
         )
 
+    metrics = AnalysisBriefMetrics(
+        total_return=json_safe_float(scoped.total_return) or 0.0,
+        cagr=json_safe_float(scoped.cagr) or 0.0,
+        mdd=json_safe_float(scoped.mdd) or 0.0,
+        sharpe=json_safe_float(scoped.sharpe) or 0.0,
+        sortino=json_safe_float(scoped.sortino) or 0.0,
+        profit_factor=pf,
+        win_rate=json_safe_float(scoped.win_rate) or 0.0,
+        trades_count=int(scoped.trades_count),
+    )
+    monthly: dict[str, float] = {}
+    for key, value in scoped.monthly_returns.items():
+        safe = json_safe_float(value)
+        if safe is not None:
+            monthly[key] = safe
+
+    snapshot = {
+        key: json_safe_float(val) if val is not None else None
+        for key, val in _indicators_at_as_of(prices_sym, as_of_d).items()
+    }
+
     return AnalysisBrief(
         schema_version=BRIEF_SCHEMA_VERSION,
-        symbol=_resolve_symbol(prices, symbol),
+        symbol=resolved_symbol,
         as_of=as_of_d.isoformat(),
-        window=AnalysisBriefWindow(start=result.start_date, end=result.end_date),
+        window=AnalysisBriefWindow(start=scoped.start_date, end=scoped.end_date),
         strategy=AnalysisBriefStrategy(
             name=strategy_name,
             params=dict(strategy_params or {}),
         ),
-        metrics=AnalysisBriefMetrics(
-            total_return=float(result.total_return),
-            cagr=float(result.cagr),
-            mdd=float(result.mdd),
-            sharpe=float(result.sharpe),
-            sortino=float(result.sortino),
-            profit_factor=pf,
-            win_rate=float(result.win_rate),
-            trades_count=int(result.trades_count),
-        ),
-        indicators_snapshot=_indicators_at_as_of(prices, as_of_d),
+        metrics=metrics,
+        indicators_snapshot=snapshot,
         signals_summary=_signals_summary(signals, as_of_d),
-        monthly_returns=dict(result.monthly_returns),
-        notes=brief_notes,
+        monthly_returns=monthly,
+        notes=tuple(brief_notes),
     )

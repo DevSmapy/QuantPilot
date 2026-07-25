@@ -61,6 +61,26 @@ def test_monthly_returns_from_month_end_equity() -> None:
     assert out["2024-03"] == pytest.approx((1.3 / 1.21) - 1.0)
 
 
+def test_monthly_returns_skips_calendar_gaps() -> None:
+    dates = [
+        date(2024, 1, 31),
+        date(2024, 3, 31),  # February missing
+        date(2024, 4, 30),
+    ]
+    equity = [1.0, 1.2, 1.3]
+    out = metrics.monthly_returns(dates, equity)
+    assert "2024-03" not in out  # would mislabel Jan→Mar as March-only
+    assert out["2024-04"] == pytest.approx((1.3 / 1.2) - 1.0)
+
+
+def test_monthly_returns_sorts_unsorted_input() -> None:
+    dates = [date(2024, 2, 28), date(2024, 1, 31), date(2024, 3, 31)]
+    equity = [1.1, 1.0, 1.21]
+    out = metrics.monthly_returns(dates, equity)
+    assert out["2024-02"] == pytest.approx(0.1)
+    assert out["2024-03"] == pytest.approx((1.21 / 1.1) - 1.0)
+
+
 def test_monthly_returns_rejects_length_mismatch() -> None:
     with pytest.raises(ValueError):
         metrics.monthly_returns([date(2024, 1, 1)], [1.0, 1.1])

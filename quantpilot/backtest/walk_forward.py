@@ -7,6 +7,7 @@ from datetime import date
 
 import polars as pl
 
+from quantpilot.backtest import metrics as metrics_mod
 from quantpilot.backtest.engine import BacktestEngine, BacktestResult
 from quantpilot.environment.costs import TradingCosts
 from quantpilot.providers.qseed_schema import QP_DATE
@@ -24,6 +25,64 @@ class WalkForwardFold:
     result: BacktestResult
 
 
+def _metric_float(
+    bundle: dict[str, float | int | dict[str, float]],
+    key: str,
+) -> float:
+    value = bundle[key]
+    if isinstance(value, dict):
+        raise TypeError(f"{key} must be numeric")
+    return float(value)
+
+
+def _metric_int(
+    bundle: dict[str, float | int | dict[str, float]],
+    key: str,
+) -> int:
+    value = bundle[key]
+    if isinstance(value, dict):
+        raise TypeError(f"{key} must be numeric")
+    return int(value)
+
+
+def _oos_result_from_extended(
+    extended: BacktestResult,
+    *,
+    oos_dates: list[date],
+) -> BacktestResult:
+    """Drop the prepended continuity bar and renormalize OOS equity to 1.0."""
+    if len(extended.equity_curve) != len(oos_dates) + 1:
+        raise ValueError("extended equity curve length must be len(oos_dates) + 1")
+    base = extended.equity_curve[0]
+    if base == 0:
+        raise ValueError("continuity equity base must be non-zero")
+    equity = [value / base for value in extended.equity_curve[1:]]
+    bundle = metrics_mod.metrics_from_equity(
+        oos_dates,
+        equity,
+        trade_pnls=extended.trade_pnls,
+        trades_count=extended.trades_count,
+    )
+    monthly = bundle["monthly_returns"]
+    if not isinstance(monthly, dict):
+        raise TypeError("monthly_returns must be a dict")
+    return BacktestResult(
+        total_return=_metric_float(bundle, "total_return"),
+        cagr=_metric_float(bundle, "cagr"),
+        mdd=_metric_float(bundle, "mdd"),
+        sharpe=_metric_float(bundle, "sharpe"),
+        sortino=_metric_float(bundle, "sortino"),
+        profit_factor=_metric_float(bundle, "profit_factor"),
+        win_rate=_metric_float(bundle, "win_rate"),
+        trades_count=_metric_int(bundle, "trades_count"),
+        start_date=str(oos_dates[0]),
+        end_date=str(oos_dates[-1]),
+        equity_curve=equity,
+        trade_pnls=list(extended.trade_pnls),
+        monthly_returns={str(k): float(v) for k, v in monthly.items()},
+    )
+
+
 def run_walk_forward(
     prices: pl.DataFrame,
     strategy: Strategy,
@@ -38,6 +97,7 @@ def run_walk_forward(
 <<<<<<< HEAD
 <<<<<<< HEAD
     Signals are generated on train+test context so indicators warm up on
+<<<<<<< HEAD
     pre-test history, then only test-period signals are backtested. Train
     dates remain metadata (no in-sample optimization).
 =======
@@ -49,6 +109,12 @@ def run_walk_forward(
     pre-test history, then only test-period signals are backtested. Train
     dates remain metadata (no in-sample optimization).
 >>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
+=======
+    pre-test history. The last train bar is prepended for **execution
+    continuity** so a signal on the final train day can fill on the first
+    test bar (prior-bar rule). Reported fold metrics cover the test window
+    only (continuity bar stripped / equity renormalized).
+>>>>>>> 68def49 (fix(analysis-quant): address code review findings)
     """
     if train_bars < 1 or test_bars < 1 or step_bars < 1:
         raise ValueError("train_bars, test_bars, and step_bars must be >= 1")
@@ -74,7 +140,9 @@ def run_walk_forward(
         context = pl.concat([train_slice, test_slice], how="vertical")
         context_signals = strategy.run(context)
         test_start_date = test_slice[QP_DATE][0]
+        train_end_date = train_slice[QP_DATE][-1]
         test_signals = context_signals.filter(pl.col(QP_DATE) >= test_start_date)
+<<<<<<< HEAD
         result = engine.run(test_slice, test_signals, costs=costs)
 <<<<<<< HEAD
 =======
@@ -83,9 +151,20 @@ def run_walk_forward(
 >>>>>>> 90d13fb (feat(backtest): rolling OOS walk-forward helper)
 =======
 >>>>>>> 3e97d89 (fix(analysis-quant): address PR review findings)
+=======
+        continuity_price = train_slice.tail(1)
+        continuity_signal = context_signals.filter(pl.col(QP_DATE) == train_end_date)
+        if continuity_signal.height != 1:
+            raise ValueError("missing train-end signal for walk-forward continuity")
+
+        extended_prices = pl.concat([continuity_price, test_slice], how="vertical")
+        extended_signals = pl.concat([continuity_signal, test_signals], how="vertical")
+        extended_result = engine.run(extended_prices, extended_signals, costs=costs)
+>>>>>>> 68def49 (fix(analysis-quant): address code review findings)
 
         train_dates = train_slice[QP_DATE].to_list()
         test_dates = test_slice[QP_DATE].to_list()
+        result = _oos_result_from_extended(extended_result, oos_dates=test_dates)
         folds.append(
             WalkForwardFold(
                 train_start=train_dates[0],
