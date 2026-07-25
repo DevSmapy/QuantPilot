@@ -122,6 +122,10 @@ def main() -> None:
     print(f"Win Rate     : {result.win_rate:.2%}")
     print(f"Trades       : {result.trades_count}")
     print(f"Period       : {result.start_date} ~ {result.end_date}")
+    if result.monthly_returns:
+        print("Monthly Rets :")
+        for month, ret in result.monthly_returns.items():
+            print(f"  {month}: {ret:+.2%}")
 
     if args.emit_brief is not None:
         brief = build_analysis_brief(

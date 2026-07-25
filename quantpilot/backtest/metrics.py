@@ -98,3 +98,37 @@ def win_rate(trade_pnls: list[float]) -> float:
         return 0.0
     wins = sum(1 for p in trade_pnls if p > 0)
     return wins / len(trade_pnls)
+
+
+def monthly_returns(
+    dates: list[date],
+    equity_curve: list[float],
+) -> dict[str, float]:
+    """Calendar-month simple returns from month-end equity levels.
+
+    Groups by YYYY-MM using the last equity observation in each month, then
+    returns ``(e_m / e_{m-1}) - 1`` keyed by the later month label. The first
+    month is omitted (no prior month-end baseline).
+    """
+    if len(dates) != len(equity_curve):
+        raise ValueError("dates and equity_curve must have the same length")
+    if not dates:
+        return {}
+
+    month_end: dict[str, float] = {}
+    for d, equity in zip(dates, equity_curve, strict=True):
+        key = f"{d.year:04d}-{d.month:02d}"
+        month_end[key] = float(equity)
+
+    keys = sorted(month_end.keys())
+    if len(keys) < 2:
+        return {}
+
+    out: dict[str, float] = {}
+    for i in range(1, len(keys)):
+        prev = month_end[keys[i - 1]]
+        curr = month_end[keys[i]]
+        if prev == 0:
+            continue
+        out[keys[i]] = (curr / prev) - 1.0
+    return out

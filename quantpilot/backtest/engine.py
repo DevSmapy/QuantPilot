@@ -36,6 +36,7 @@ class BacktestResult:
     end_date: str
     equity_curve: list[float] = field(default_factory=list)
     trade_pnls: list[float] = field(default_factory=list)
+    monthly_returns: dict[str, float] = field(default_factory=dict)
 
 
 class BacktestEngine:
@@ -153,4 +154,5 @@ class BacktestEngine:
             end_date=str(dates[-1]),
             equity_curve=equity_curve,
             trade_pnls=trade_pnls,
+            monthly_returns=metrics.monthly_returns(dates, equity_curve),
         )

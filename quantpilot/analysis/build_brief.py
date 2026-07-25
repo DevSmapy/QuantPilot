@@ -157,5 +157,6 @@ def build_analysis_brief(
         ),
         indicators_snapshot=_indicators_at_as_of(prices, as_of_d),
         signals_summary=_signals_summary(signals, as_of_d),
+        monthly_returns=dict(result.monthly_returns),
         notes=brief_notes,
     )

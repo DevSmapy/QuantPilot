@@ -150,3 +150,4 @@ def test_backtest_engine_returns_metrics(sample_prices: pl.DataFrame) -> None:
     assert isinstance(result.win_rate, float)
     assert len(result.equity_curve) == sample_prices.height
     assert result.trades_count >= 0
+    assert isinstance(result.monthly_returns, dict)

@@ -66,6 +66,7 @@ class AnalysisBrief:
     metrics: AnalysisBriefMetrics
     indicators_snapshot: dict[str, float | None]
     signals_summary: AnalysisBriefSignalsSummary
+    monthly_returns: dict[str, float] = field(default_factory=dict)
     notes: list[str] = field(default_factory=lambda: list(DEFAULT_BRIEF_NOTES))
 
     def to_dict(self) -> dict[str, Any]:
