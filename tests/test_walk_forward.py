@@ -68,9 +68,7 @@ def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
         step_bars=20,
     )
     assert len(folds) == 1
-    test_signals = strategy.run(prices).filter(
-        pl.col(QP_DATE) >= folds[0].test_start
-    )
+    test_signals = strategy.run(prices).filter(pl.col(QP_DATE) >= folds[0].test_start)
     # With warm-up context, at least one buy event should appear in the OOS window.
     assert test_signals.filter(pl.col("signal") == 1).height >= 1
     assert folds[0].result.trades_count >= 1
@@ -78,6 +76,37 @@ def test_walk_forward_warms_indicators_for_early_oos_crossover() -> None:
     # Cold start on test-only would miss the early cross relative to warmed signals.
     cold = strategy.run(prices.slice(30, 20))
     warm_oos = strategy.run(prices).filter(pl.col(QP_DATE) >= folds[0].test_start)
-    assert warm_oos.filter(pl.col("signal") == 1).height >= cold.filter(
-        pl.col("signal") == 1
-    ).height
+    assert (
+        warm_oos.filter(pl.col("signal") == 1).height
+        >= cold.filter(pl.col("signal") == 1).height
+    )
+
+
+def test_walk_forward_continuity_can_trade_on_first_oos_bar() -> None:
+    """Last train signal should be executable on the first test bar."""
+    start = date(2024, 1, 1)
+    # Flat then step up on the boundary so a buy signal lands on the last train day.
+    closes = [100.0] * 25 + [120.0] * 15
+    prices = pl.DataFrame(
+        {
+            QP_DATE: [start + timedelta(days=i) for i in range(len(closes))],
+            QP_CLOSE: closes,
+            "symbol": ["TEST.KS"] * len(closes),
+            "open": closes,
+            "high": [c + 1.0 for c in closes],
+            "low": [c - 1.0 for c in closes],
+            "volume": [1000] * len(closes),
+            "market": ["KOSPI"] * len(closes),
+        }
+    )
+    strategy = SMACrossStrategy(fast_window=3, slow_window=10)
+    folds = run_walk_forward(
+        prices,
+        strategy,
+        train_bars=28,
+        test_bars=12,
+        step_bars=12,
+    )
+    assert len(folds) >= 1
+    assert folds[0].result.equity_curve[0] == pytest.approx(1.0)
+    assert len(folds[0].result.equity_curve) == 12

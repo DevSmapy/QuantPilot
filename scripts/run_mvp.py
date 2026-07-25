@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 from datetime import date
+from pathlib import Path
+from typing import Any
 
+from quantpilot.analysis.build_brief import build_analysis_brief
 from quantpilot.backtest.engine import BacktestEngine
 from quantpilot.console import configure_stdio
 from quantpilot.environment.costs import TradingCosts
@@ -53,19 +56,47 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip Ollama strategy review",
     )
+    parser.add_argument(
+        "--emit-brief",
+        nargs="?",
+        const="-",
+        default=None,
+        metavar="PATH",
+        help="Write AnalysisBrief JSON to PATH (or stdout if '-' / flag only)",
+    )
     return parser.parse_args()
 
 
-def build_strategy(name: str) -> tuple[Strategy, str]:
+def build_strategy(name: str) -> tuple[Strategy, str, dict[str, Any]]:
     if name == "sma_cross":
-        return SMACrossStrategy(fast_window=20, slow_window=60), "SMA Cross (20/60)"
-    return RSIReversionStrategy(), "RSI Reversion (14, 30/70)"
+        strategy = SMACrossStrategy(fast_window=20, slow_window=60)
+        return (
+            strategy,
+            "SMA Cross (20/60)",
+            {
+                "fast_window": strategy.fast_window,
+                "slow_window": strategy.slow_window,
+            },
+        )
+    strategy = RSIReversionStrategy()
+    return (
+        strategy,
+        (
+            f"RSI Reversion ({strategy.window}, "
+            f"{strategy.oversold:g}/{strategy.overbought:g})"
+        ),
+        {
+            "window": strategy.window,
+            "oversold": strategy.oversold,
+            "overbought": strategy.overbought,
+        },
+    )
 
 
 def main() -> None:
     configure_stdio()
     args = parse_args()
-    strategy, strategy_label = build_strategy(args.strategy)
+    strategy, strategy_label, strategy_params = build_strategy(args.strategy)
     costs = TradingCosts(
         commission_rate=args.commission_rate,
         slippage_bps=args.slippage_bps,
@@ -97,6 +128,30 @@ def main() -> None:
     print(f"Win Rate     : {result.win_rate:.2%}")
     print(f"Trades       : {result.trades_count}")
     print(f"Period       : {result.start_date} ~ {result.end_date}")
+    if result.monthly_returns:
+        print("Monthly Rets :")
+        for month, ret in result.monthly_returns.items():
+            print(f"  {month}: {ret:+.2%}")
+
+    if args.emit_brief is not None:
+        brief = build_analysis_brief(
+            prices=prices,
+            signals=signals,
+            result=result,
+            strategy_name=args.strategy,
+            strategy_params=strategy_params,
+            symbol=args.symbol,
+            costs=costs,
+        )
+        payload = brief.to_json()
+        if args.emit_brief in ("-", ""):
+            print("\nAnalysisBrief JSON")
+            print("-" * 60)
+            print(payload)
+        else:
+            path = Path(args.emit_brief)
+            path.write_text(payload + "\n", encoding="utf-8")
+            print(f"\nWrote AnalysisBrief to {path}")
 
     if args.skip_ai:
         print("\nAI review skipped (--skip-ai)")
