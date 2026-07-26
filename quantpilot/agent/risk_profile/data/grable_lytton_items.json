@@ -1,0 +1,135 @@
+{
+  "citation": "Grable, J. E., & Lytton, R. H. (1999). Financial risk tolerance revisited: The development of a risk assessment instrument. Financial Services Review, 8(3), 163-181.",
+  "score_min": 13,
+  "score_max": 47,
+  "bands": [
+    {"persona_id": "conservative", "max_inclusive": 22},
+    {"persona_id": "balanced", "max_inclusive": 28},
+    {"persona_id": "aggressive", "max_inclusive": 47}
+  ],
+  "items": [
+    {
+      "id": "gl_01",
+      "prompt": "In general, how would your best friend describe you as a risk taker?",
+      "choices": [
+        {"id": "a", "label": "A real gambler", "points": 4},
+        {"id": "b", "label": "Willing to take risks after completing adequate research", "points": 3},
+        {"id": "c", "label": "Cautious", "points": 2},
+        {"id": "d", "label": "A real risk avoider", "points": 1}
+      ]
+    },
+    {
+      "id": "gl_02",
+      "prompt": "You are on a TV game show and can choose one of the following; which would you take?",
+      "choices": [
+        {"id": "a", "label": "$1,000 in cash", "points": 1},
+        {"id": "b", "label": "A 50% chance at winning $5,000", "points": 2},
+        {"id": "c", "label": "A 25% chance at winning $10,000", "points": 3},
+        {"id": "d", "label": "A 5% chance at winning $100,000", "points": 4}
+      ]
+    },
+    {
+      "id": "gl_03",
+      "prompt": "You have just finished saving for a once-in-a-lifetime vacation. Three weeks before you plan to leave, you lose your job. You would:",
+      "choices": [
+        {"id": "a", "label": "Cancel the vacation", "points": 1},
+        {"id": "b", "label": "Take a much more modest vacation", "points": 2},
+        {"id": "c", "label": "Go as scheduled, reasoning that you need time to prepare for a job search", "points": 3},
+        {"id": "d", "label": "Extend your vacation because this might be your last chance to go first-class", "points": 4}
+      ]
+    },
+    {
+      "id": "gl_04",
+      "prompt": "If you unexpectedly received $20,000 to invest, what would you do?",
+      "choices": [
+        {"id": "a", "label": "Deposit it in a bank account, money market account, or insured CD", "points": 1},
+        {"id": "b", "label": "Invest it in safe high-quality bonds or bond mutual funds", "points": 2},
+        {"id": "c", "label": "Invest it in stocks or stock mutual funds", "points": 3}
+      ]
+    },
+    {
+      "id": "gl_05",
+      "prompt": "In terms of experience, how comfortable are you investing in stocks or stock mutual funds?",
+      "choices": [
+        {"id": "a", "label": "Not at all comfortable", "points": 1},
+        {"id": "b", "label": "Somewhat comfortable", "points": 2},
+        {"id": "c", "label": "Very comfortable", "points": 3}
+      ]
+    },
+    {
+      "id": "gl_06",
+      "prompt": "When you think of the word \"risk\", which of the following words comes to mind first?",
+      "choices": [
+        {"id": "a", "label": "Loss", "points": 1},
+        {"id": "b", "label": "Uncertainty", "points": 2},
+        {"id": "c", "label": "Opportunity", "points": 3},
+        {"id": "d", "label": "Thrill", "points": 4}
+      ]
+    },
+    {
+      "id": "gl_07",
+      "prompt": "Some experts are predicting prices of hard assets (gold, jewels, collectibles, real estate) to increase; bond prices may fall, though government bonds are relatively safe. Most of your investment assets are now in high-interest government bonds. What would you do?",
+      "choices": [
+        {"id": "a", "label": "Hold the bonds", "points": 1},
+        {"id": "b", "label": "Sell the bonds; put half into money markets and half into hard assets", "points": 2},
+        {"id": "c", "label": "Sell the bonds and put the total proceeds into hard assets", "points": 3},
+        {"id": "d", "label": "Sell the bonds, put all into hard assets, and borrow additional money to buy more", "points": 4}
+      ]
+    },
+    {
+      "id": "gl_08",
+      "prompt": "Given the best and worst case returns of the four investment choices below, which would you prefer?",
+      "choices": [
+        {"id": "a", "label": "$200 gain best case; $0 loss worst case", "points": 1},
+        {"id": "b", "label": "$800 gain best case; $200 loss worst case", "points": 2},
+        {"id": "c", "label": "$2,600 gain best case; $800 loss worst case", "points": 3},
+        {"id": "d", "label": "$4,800 gain best case; $2,400 loss worst case", "points": 4}
+      ]
+    },
+    {
+      "id": "gl_09",
+      "prompt": "In addition to whatever you own, you have been given $1,000. You are now asked to choose between:",
+      "choices": [
+        {"id": "a", "label": "A sure gain of $500", "points": 1},
+        {"id": "b", "label": "A 50% chance to gain $1,000 and a 50% chance to gain nothing", "points": 3}
+      ]
+    },
+    {
+      "id": "gl_10",
+      "prompt": "In addition to whatever you own, you have been given $2,000. You are now asked to choose between:",
+      "choices": [
+        {"id": "a", "label": "A sure loss of $500", "points": 1},
+        {"id": "b", "label": "A 50% chance to lose $1,000 and a 50% chance to lose nothing", "points": 3}
+      ]
+    },
+    {
+      "id": "gl_11",
+      "prompt": "Suppose a relative left you an inheritance of $100,000, stipulating that you invest ALL the money in ONE of the following choices. Which one would you select?",
+      "choices": [
+        {"id": "a", "label": "A savings account or money market mutual fund", "points": 1},
+        {"id": "b", "label": "A mutual fund that owns stocks and bonds", "points": 2},
+        {"id": "c", "label": "A portfolio of 15 common stocks", "points": 3},
+        {"id": "d", "label": "Commodities like gold, silver, and oil", "points": 4}
+      ]
+    },
+    {
+      "id": "gl_12",
+      "prompt": "If you had to invest $20,000, which of the following investment choices would you find most appealing?",
+      "choices": [
+        {"id": "a", "label": "60% low-risk, 30% medium-risk, 10% high-risk", "points": 1},
+        {"id": "b", "label": "30% low-risk, 40% medium-risk, 30% high-risk", "points": 2},
+        {"id": "c", "label": "10% low-risk, 40% medium-risk, 50% high-risk", "points": 3}
+      ]
+    },
+    {
+      "id": "gl_13",
+      "prompt": "Your trusted friend, an experienced geologist, is funding an exploratory gold mining venture. It could pay 50–100× if successful, or be worthless (≈20% chance of success). If you had the money, how much would you invest?",
+      "choices": [
+        {"id": "a", "label": "Nothing", "points": 1},
+        {"id": "b", "label": "One month's salary", "points": 2},
+        {"id": "c", "label": "Three months' salary", "points": 3},
+        {"id": "d", "label": "Six months' salary", "points": 4}
+      ]
+    }
+  ]
+}

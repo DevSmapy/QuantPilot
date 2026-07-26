@@ -1,0 +1,32 @@
+{
+  "citation": "Capacity axes inspired by FINRA digital-advice practice (time horizon, liquidity needs, objectives). Not a commercial suitability product.",
+  "items": [
+    {
+      "id": "cap_horizon",
+      "prompt": "When might you need to use most of this paper-trading capital for something else?",
+      "choices": [
+        {"id": "a", "label": "Within about 1 year", "points": 0, "bucket": "conservative"},
+        {"id": "b", "label": "In 1–3 years", "points": 1, "bucket": "balanced"},
+        {"id": "c", "label": "More than 3 years from now", "points": 2, "bucket": "aggressive"}
+      ]
+    },
+    {
+      "id": "cap_liquidity",
+      "prompt": "How likely are you to need to pull a large share of this capital out on short notice?",
+      "choices": [
+        {"id": "a", "label": "Likely — I may need the cash", "points": 0, "bucket": "conservative"},
+        {"id": "b", "label": "Possible but not planned", "points": 1, "bucket": "balanced"},
+        {"id": "c", "label": "Unlikely — I can leave it invested", "points": 2, "bucket": "aggressive"}
+      ]
+    },
+    {
+      "id": "cap_priority",
+      "prompt": "If the target is hard to reach, what should take priority?",
+      "choices": [
+        {"id": "a", "label": "Protecting principal over hitting the target", "points": 0, "bucket": "conservative"},
+        {"id": "b", "label": "Balance between principal and target", "points": 1, "bucket": "balanced"},
+        {"id": "c", "label": "Hitting the target even with more volatility", "points": 2, "bucket": "aggressive"}
+      ]
+    }
+  ]
+}

@@ -7,7 +7,9 @@ import csv
 import io
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Literal, cast
+from uuid import uuid4
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -16,6 +18,16 @@ from quantpilot.agent.base import TradingAgent
 from quantpilot.agent.decision import TradeDecision
 from quantpilot.agent.hold import HoldAgent
 from quantpilot.agent.llm import LlmTradingAgent
+from quantpilot.agent.persona import get_persona
+from quantpilot.agent.risk_profile.i18n import (
+    localize_questions,
+    normalize_lang,
+    ui_text,
+)
+from quantpilot.agent.risk_profile.profile_io import load_profile, save_profile
+from quantpilot.agent.risk_profile.questionnaire import collect_answer_sheet_from_maps
+from quantpilot.agent.risk_profile.questions import load_all_questions
+from quantpilot.agent.risk_profile.scoring import score_answer_sheet
 from quantpilot.console import configure_stdio
 from quantpilot.environment.costs import TradingCosts
 from quantpilot.environment.market import HistoricalMarket, intersect_session_dates
@@ -350,7 +362,9 @@ def _markers_from_result(
     for fill in result.fills:
         marker = _TradeMarker(
             day=fill.date.isoformat(),
-            equity=equity_after_fill.get(fill.date, equity_eod.get(fill.date, result.final_equity)),
+            equity=equity_after_fill.get(
+                fill.date, equity_eod.get(fill.date, result.final_equity)
+            ),
             exec_price=fill.price,
             close_price=closes_by_date.get(fill.date, fill.price),
             text=f"{fill.symbol} {fill.qty}@{fill.price:.2f}",
@@ -693,9 +707,15 @@ def main() -> None:
         )
         start = st.date_input("Start", value=date(2024, 1, 2))
         period_days = st.number_input("Period days", min_value=1, value=90)
-        capital = st.number_input("Capital", min_value=1.0, value=10_000_000.0, step=100_000.0)
-        target = st.number_input("Target", min_value=1.0, value=12_000_000.0, step=100_000.0)
-        decision_every = st.number_input("Decision every N sessions", min_value=1, value=5)
+        capital = st.number_input(
+            "Capital", min_value=1.0, value=10_000_000.0, step=100_000.0
+        )
+        target = st.number_input(
+            "Target", min_value=1.0, value=12_000_000.0, step=100_000.0
+        )
+        decision_every = st.number_input(
+            "Decision every N sessions", min_value=1, value=5
+        )
         commission_rate = st.number_input(
             "Commission rate",
             min_value=0.0,
@@ -705,7 +725,44 @@ def main() -> None:
         )
         slippage_bps = st.number_input("Slippage bps", min_value=0.0, value=0.0)
         hold_only = st.checkbox("Hold only (no LLM)", value=True)
+        profile_path = st.text_input(
+            "Risk profile JSON path",
+            value="",
+            help="From scripts/assess_risk_profile.py (preferred over persona override)",
+        )
+        persona_override = st.selectbox(
+            "Persona override (dev only)",
+            ["(from profile / balanced)", "conservative", "balanced", "aggressive"],
+            index=0,
+        )
+        judge_sell = st.checkbox("Judge sell reasons (LLM grounding)", value=True)
+        q_lang_label = st.selectbox(
+            "Q&A language / 진단 언어",
+            ["ko", "en"],
+            index=0,
+        )
         run = st.button("Run simulation", type="primary")
+
+    q_lang = normalize_lang(q_lang_label)
+    with st.expander(ui_text("streamlit_expander", q_lang), expanded=False):
+        st.caption(ui_text("streamlit_caption", q_lang))
+        answers: dict[str, str] = {}
+        for q in localize_questions(load_all_questions(), q_lang):
+            labels = [f"{c.id}: {c.label}" for c in q.choices]
+            picked = st.radio(q.prompt, labels, key=f"risk_{q_lang}_{q.id}")
+            answers[q.id] = picked.split(":", 1)[0].strip()
+        if st.button(ui_text("streamlit_score_btn", q_lang)):
+            sheet = collect_answer_sheet_from_maps(answers)
+            result = score_answer_sheet(sheet, source="streamlit")
+            for line in result.summary_lines(q_lang):
+                st.write(line)
+            profile_id = f"streamlit-{date.today().isoformat()}-{uuid4().hex[:8]}"
+            out = save_profile(
+                result,
+                profile_id=profile_id,
+            )
+            st.success(ui_text("streamlit_saved", q_lang, path=out))
+            st.session_state["last_profile_path"] = str(out)
 
     if run:
         status_box = st.empty()
@@ -737,8 +794,20 @@ def main() -> None:
             if hold_only:
                 agent: TradingAgent = HoldAgent()
             else:
+                persona = get_persona("balanced")
+                path_str = profile_path.strip() or st.session_state.get(
+                    "last_profile_path", ""
+                )
+                if path_str:
+                    persona = load_profile(Path(path_str)).persona()
+                elif persona_override != "(from profile / balanced)":
+                    persona = get_persona(persona_override)
                 agent = _StatusLlmAgent(
-                    LlmTradingAgent(create_ollama_provider()),
+                    LlmTradingAgent(
+                        create_ollama_provider(),
+                        persona=persona,
+                        judge_sell_reason=judge_sell,
+                    ),
                     status_box,
                 )
 

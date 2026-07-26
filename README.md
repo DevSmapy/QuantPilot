@@ -225,6 +225,8 @@ uv run pytest -m integration
 
 미래 시세를 모르는 채 거래일마다 정보를 열어 가며 LLM(또는 Hold) 에이전트가 가상 자본을 운용합니다. 상세 규칙·패키지·트러블슈팅은 [`docs/agent/README.md`](docs/agent/README.md)를 보세요.
 
+투자 성향은 셀프 라벨 대신 Q&A로 도출합니다 (`scripts/assess_risk_profile.py`, Grable–Lytton + capacity). 프로필 JSON을 `--profile`로 시뮬에 넘기면 TradingPersona 가드와 sell grounding이 적용됩니다. 진단 UI 언어는 `--lang ko|en`(기본 `ko`)입니다.
+
 ### 환경 (로컬 `uv run` / Docker 공통)
 
 ```bash
