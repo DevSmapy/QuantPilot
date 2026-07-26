@@ -1,4 +1,4 @@
-"""LLM-backed trading agent with sell-reason enforcement."""
+"""LLM-backed trading agent with persona guards and sell grounding."""
 
 from __future__ import annotations
 
@@ -6,6 +6,13 @@ from typing import Any, Protocol
 
 from quantpilot.agent.base import TradingAgent
 from quantpilot.agent.decision import TradeDecision, parse_trade_decision
+from quantpilot.agent.persona import (
+    TradingPersona,
+    apply_persona_guards,
+    build_persona_prompt_section,
+    get_persona,
+)
+from quantpilot.agent.sell_judge import gate_sell_decision
 from quantpilot.environment.observation import AgentObservation
 
 
@@ -26,15 +33,23 @@ class LlmTradingAgent(TradingAgent):
         self,
         llm: SupportsGenerate,
         *,
+        persona: TradingPersona | None = None,
+        judge_sell_reason: bool = True,
         max_retries: int = 1,
         options: dict[str, Any] | None = None,
     ) -> None:
         self._llm = llm
+        self._persona = persona or get_persona("balanced")
+        self._judge_sell_reason = judge_sell_reason
         self._max_retries = max(0, max_retries)
         self._options = options
 
+    @property
+    def persona(self) -> TradingPersona:
+        return self._persona
+
     def decide(self, observation: AgentObservation) -> TradeDecision:
-        prompt = _build_prompt(observation)
+        prompt = _build_prompt(observation, self._persona)
         attempts = self._max_retries + 1
         for _ in range(attempts):
             try:
@@ -46,27 +61,39 @@ class LlmTradingAgent(TradingAgent):
             except Exception:
                 return TradeDecision.hold(reason="llm_unavailable")
             decision = parse_trade_decision(raw, universe=observation.symbols)
-            if decision is not None:
-                if decision.action == "sell":
-                    symbol = decision.symbol or (
-                        observation.symbols[0] if len(observation.symbols) == 1 else None
-                    )
-                    qty = (
-                        observation.portfolio.holdings.get(symbol, 0)
-                        if symbol is not None
-                        else 0
-                    )
-                    if qty <= 0:
-                        return TradeDecision.hold(reason="sell_with_zero_qty")
-                return decision
+            if decision is None:
+                continue
+            if decision.action == "sell":
+                symbol = decision.symbol or (
+                    observation.symbols[0] if len(observation.symbols) == 1 else None
+                )
+                qty = (
+                    observation.portfolio.holdings.get(symbol, 0)
+                    if symbol is not None
+                    else 0
+                )
+                if qty <= 0:
+                    return TradeDecision.hold(reason="sell_with_zero_qty")
+            decision = apply_persona_guards(decision, observation, self._persona)
+            if decision.action == "sell":
+                decision = gate_sell_decision(
+                    decision,
+                    observation,
+                    llm=self._llm,
+                    use_llm_judge=self._judge_sell_reason,
+                    options=self._options,
+                    prefer_instructor=False,
+                )
+            return decision
         return TradeDecision.hold(reason="invalid_llm_decision")
 
 
-def _build_prompt(obs: AgentObservation) -> str:
+def _build_prompt(obs: AgentObservation, persona: TradingPersona) -> str:
     port = obs.portfolio
-    holdings = ", ".join(
-        f"{symbol}:{qty}" for symbol, qty in sorted(port.holdings.items())
-    ) or "(none)"
+    holdings = (
+        ", ".join(f"{symbol}:{qty}" for symbol, qty in sorted(port.holdings.items()))
+        or "(none)"
+    )
     multi = len(obs.symbols) > 1
     schema = (
         '{"action":"buy"|"sell"|"hold","size":number,"reason":string,"symbol":string}'
@@ -74,14 +101,13 @@ def _build_prompt(obs: AgentObservation) -> str:
         else '{"action":"buy"|"sell"|"hold","size":number,"reason":string}'
     )
     symbol_rule = (
-        "- For buy/sell, symbol MUST be one of the universe tickers.\n"
-        if multi
-        else ""
+        "- For buy/sell, symbol MUST be one of the universe tickers.\n" if multi else ""
     )
     legs_text: list[str] = []
     for leg in obs.legs:
         bars = "\n".join(
-            f"  - {b['date']}: open={b['open']}, close={b['close']}, volume={b['volume']}"
+            f"  - {b['date']}: open={b['open']}, "
+            f"close={b['close']}, volume={b['volume']}"
             for b in leg.recent_bars
         )
         legs_text.append(
@@ -89,16 +115,20 @@ def _build_prompt(obs: AgentObservation) -> str:
             f"  SMA20={leg.sma_20} SMA60={leg.sma_60} RSI14={leg.rsi_14}\n"
             f"  Recent bars:\n{bars}"
         )
+    persona_block = build_persona_prompt_section(persona)
     return (
         "You are a long-only paper trader. Reply with ONLY one JSON object.\n"
+        f"{persona_block}\n"
         f"Schema: {schema}\n"
         "- buy size: fraction of cash to spend (0 < size <= 1)\n"
         "- sell size: fraction of shares to sell (0 < size <= 1)\n"
         "- hold: size ignored\n"
-        "- If action is sell, reason MUST be a non-empty explanation.\n"
+        "- If action is sell, reason MUST be a non-empty explanation grounded "
+        "in the observation (trend/RSI/PnL/target/time).\n"
         f"{symbol_rule}"
         "- No shorting. You cannot see future prices.\n"
-        "- Decisions are end-of-day using today's close; orders fill at the next open.\n\n"
+        "- Decisions are end-of-day using today's close; "
+        "orders fill at the next open.\n\n"
         f"Universe: {', '.join(obs.symbols)}\n"
         f"As of: {obs.as_of}\n"
         f"Session: {obs.session_index + 1}/{obs.session_count} "
@@ -108,7 +138,5 @@ def _build_prompt(obs: AgentObservation) -> str:
         f"Cash: {port.cash:.2f}\n"
         f"Holdings: {holdings}\n"
         f"Equity: {port.equity:.2f}\n"
-        f"Unrealized PnL: {port.unrealized_pnl:.2f}\n\n"
-        + "\n\n".join(legs_text)
-        + "\n"
+        f"Unrealized PnL: {port.unrealized_pnl:.2f}\n\n" + "\n\n".join(legs_text) + "\n"
     )

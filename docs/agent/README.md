@@ -23,12 +23,16 @@ quantpilot/
   agent/           # 행동 주체
     base.py        # TradingAgent.decide(obs) -> TradeDecision
     hold.py        # HoldAgent (항상 hold)
-    llm.py         # LlmTradingAgent (Ollama JSON)
+    llm.py         # LlmTradingAgent (Ollama JSON + persona + sell gate)
+    persona.py     # TradingPersona 정책·하드 가드
+    sell_judge.py  # sell 사유 heuristic + grounding
     decision.py    # 파싱·sell 사유·symbol 검증
+    risk_profile/  # G&L willingness + capacity Q&A → persona
   simulation/      # 조립
     session.py     # SimulationSession
     result.py      # SimResult (equity curve, decision log, fees)
     benchmark.py   # buy-and-hold (단일 / equal-weight 다종목)
+scripts/assess_risk_profile.py
 scripts/run_agent_sim.py
 scripts/streamlit_agent_sim.py
 ```
@@ -153,6 +157,9 @@ uv run streamlit run scripts/streamlit_agent_sim.py
 | `--slippage-bps` | 0 | 슬리피지 (bps) |
 | `--runs` | 1 | 순차 반복 횟수 |
 | `--hold-only` | off | LLM 대신 HoldAgent |
+| `--profile` | 없음 | `assess_risk_profile.py`가 저장한 프로필 JSON |
+| `--persona` | 없음 | 개발용 성향 오버라이드 (`conservative`/`balanced`/`aggressive`) |
+| `--no-sell-judge` | off | sell grounding LLM judge 비활성화 |
 | `--model` | settings | Ollama 모델명 |
 | `--temperature` | 0.7 | Ollama temperature (`--runs` 분산용) |
 | `--seed` | 없음 | 있으면 run i에 `seed+i-1` 전달 |
@@ -186,6 +193,9 @@ docker compose build quantpilot
 
 ```bash
 uv run pytest tests/test_agent_decision.py \
+  tests/test_agent_persona.py \
+  tests/test_risk_scoring.py \
+  tests/test_sell_judge.py \
   tests/test_environment_broker.py \
   tests/test_environment_market_clock.py \
   tests/test_simulation_session.py \
@@ -194,7 +204,50 @@ uv run pytest tests/test_agent_decision.py \
 
 ---
 
+## 투자 성향 도출 (Q&A)
+
+셀프 라벨(`나는 공격적`)이 아니라 **시나리오 문항**으로 성향을 도출합니다.
+
+- **Willingness**: Grable & Lytton (1999) 13문항 (검증된 척도; 새로 발명하지 않음)
+- **Capacity**: 지평·유동성·우선순위 3문항 (FINRA digital-advice 축 근사)
+- 충돌 시 **더 보수인 쪽** 채택 (`willingness_exceeds_capacity` 플래그)
+- CLI UI는 **questionary**, LLM 인터뷰/구조화 추출은 **instructor** (성숙 PyPI risk-profiler 패키지는 없음)
+
+```bash
+# 고정 설문 → storage/profiles/*.json
+uv run python scripts/assess_risk_profile.py
+
+# 선택: Ollama 인터뷰어 (같은 AnswerSheet·채점기)
+uv run python scripts/assess_risk_profile.py --llm
+
+# 시뮬에 프로필 연결
+uv run python scripts/run_agent_sim.py \
+  --profile storage/profiles/2026-07-26-profile.json \
+  --start 2024-01-02 --target 12000000 --period-days 90
+```
+
+`--persona {conservative,balanced,aggressive}` 는 **개발용 오버라이드**입니다. 기본 UX는 진단 프로필입니다.
+
+### TradingPersona 가드
+
+프롬프트로 유도하고, 코드가 강제합니다.
+
+| 필드 | conservative | balanced | aggressive |
+|------|--------------|----------|------------|
+| max_buy_size | 0.20 | 0.50 | 1.00 |
+| max_sell_size | 0.40 | 0.75 | 1.00 |
+| min_cash_fraction | 0.40 | 0.15 | 0.00 |
+
+### sell 사유 grounding
+
+- 휴리스틱: 너무 짧거나 placeholder → `sell_reason_weak` hold
+- LLM judge (기본 ON): 관측 근거 없으면 `sell_reason_ungrounded` hold
+- `--no-sell-judge` 로 LLM judge만 끔 (휴리스틱은 유지)
+- “좋은 투자 논리인지” 채점이 아니라 **근거 유무**만 봅니다.
+
+---
+
 ## 후속 (미구현)
 
-- LM Studio, 투자 성향 모방
-- sell 사유 “품질” 재판정, consensus 종목 추천
+- LM Studio 연동
+- consensus 종목 추천

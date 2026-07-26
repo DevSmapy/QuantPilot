@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, timedelta
+from pathlib import Path
 
 from quantpilot.agent.hold import HoldAgent
 from quantpilot.agent.llm import LlmTradingAgent
+from quantpilot.agent.persona import get_persona
+from quantpilot.agent.risk_profile.profile_io import load_profile
 from quantpilot.console import configure_stdio
 from quantpilot.environment.costs import TradingCosts
 from quantpilot.environment.market import HistoricalMarket, intersect_session_dates
@@ -87,6 +90,23 @@ def parse_args() -> argparse.Namespace:
         help="Use HoldAgent instead of LLM (no Ollama calls)",
     )
     parser.add_argument(
+        "--profile",
+        type=Path,
+        default=None,
+        help="Path to risk profile JSON from scripts/assess_risk_profile.py",
+    )
+    parser.add_argument(
+        "--persona",
+        choices=["conservative", "balanced", "aggressive"],
+        default=None,
+        help="Dev override persona (prefer --profile from Q&A assessment)",
+    )
+    parser.add_argument(
+        "--no-sell-judge",
+        action="store_true",
+        help="Disable LLM sell-reason grounding (heuristic still applies)",
+    )
+    parser.add_argument(
         "--lookback-sessions",
         type=int,
         default=DEFAULT_LOOKBACK_SESSIONS,
@@ -160,6 +180,15 @@ def _load_markets(
     return markets
 
 
+def _resolve_persona(args: argparse.Namespace):
+    if args.profile is not None:
+        profile = load_profile(args.profile)
+        return profile.persona(), profile
+    if args.persona is not None:
+        return get_persona(args.persona), None
+    return get_persona("balanced"), None
+
+
 def _make_agent(
     args: argparse.Namespace,
     *,
@@ -167,13 +196,19 @@ def _make_agent(
 ) -> HoldAgent | LlmTradingAgent:
     if args.hold_only:
         return HoldAgent()
+    persona, _profile = _resolve_persona(args)
     llm = create_ollama_provider()
     if args.model:
         llm.model = args.model
     options: dict[str, float | int] = {"temperature": args.temperature}
     if args.seed is not None:
         options["seed"] = args.seed + run_idx - 1
-    return LlmTradingAgent(llm, options=options)
+    return LlmTradingAgent(
+        llm,
+        persona=persona,
+        judge_sell_reason=not args.no_sell_judge,
+        options=options,
+    )
 
 
 def _print_result(result: SimResult, run_idx: int, runs: int) -> None:
@@ -251,6 +286,18 @@ def main() -> None:
         commission_rate=args.commission_rate,
         slippage_bps=args.slippage_bps,
     )
+    if not args.hold_only:
+        persona, profile = _resolve_persona(args)
+        print(f"Persona      : {persona.id} ({persona.label})")
+        if profile is not None:
+            print(
+                f"Profile      : willingness={profile.willingness_score} "
+                f"capacity={profile.capacity_score} flags={profile.flags}"
+            )
+        if args.persona and args.profile is None:
+            print("Note: --persona is a dev override; prefer assess_risk_profile.py")
+        print(f"Sell judge   : {'off' if args.no_sell_judge else 'on'}")
+
     results: list[SimResult] = []
     for run_idx in range(1, args.runs + 1):
         if args.runs > 1:
