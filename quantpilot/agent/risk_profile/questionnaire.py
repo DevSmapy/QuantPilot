@@ -14,9 +14,13 @@ from quantpilot.agent.risk_profile.sheet import AnswerSheet, ChoiceAnswer
 def collect_answer_sheet_questionary(
     *,
     questions: list[Question] | None = None,
-    lang: Lang = "en",
+    lang: Lang = "ko",
 ) -> AnswerSheet:
-    """Run the full fixed questionnaire via questionary select prompts."""
+    """Run the full fixed questionnaire via questionary select prompts.
+
+    Cancellation (``questionary`` returning ``None``) raises ``KeyboardInterrupt``.
+    Callers such as the CLI entrypoint must catch it for a clean exit.
+    """
     items = (
         questions
         if questions is not None
@@ -61,7 +65,7 @@ def confirm_profile(
     summary_lines: list[str],
     ask_confirm: Callable[[str], bool] | None = None,
     *,
-    lang: Lang = "en",
+    lang: Lang = "ko",
 ) -> bool:
     """Ask the user to confirm applying the derived policy."""
     title = ui_text("confirm_title", lang)

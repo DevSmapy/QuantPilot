@@ -10,15 +10,24 @@ from pydantic import BaseModel
 
 from quantpilot.config import Settings, get_settings
 
+# Bound hung Ollama calls so sell-judge can fall back to hold.
+_DEFAULT_TIMEOUT_S = 30.0
+_CLIENT_CACHE: dict[str, Any] = {}
+
 
 def create_instructor_client(settings: Settings | None = None) -> Any:
-    """Build an instructor client pointed at the configured Ollama OpenAI API."""
+    """Build or reuse an instructor client for the configured Ollama API."""
     cfg = settings or get_settings()
     base = cfg.ollama_base_url.rstrip("/")
     if not base.endswith("/v1"):
         base = f"{base}/v1"
-    raw = OpenAI(base_url=base, api_key="ollama")
-    return instructor.from_openai(raw, mode=instructor.Mode.JSON)
+    cached = _CLIENT_CACHE.get(base)
+    if cached is not None:
+        return cached
+    raw = OpenAI(base_url=base, api_key="ollama", timeout=_DEFAULT_TIMEOUT_S)
+    client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
+    _CLIENT_CACHE[base] = client
+    return client
 
 
 def extract_structured[T: BaseModel](

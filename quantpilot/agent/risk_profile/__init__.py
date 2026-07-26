@@ -1,4 +1,4 @@
-"""Risk-profile elicitation: Grable–Lytton willingness + capacity Q&A."""
+"""Risk-profile elicitation: Grable-Lytton willingness + capacity Q&A."""
 
 from quantpilot.agent.risk_profile.i18n import localize_questions, normalize_lang
 from quantpilot.agent.risk_profile.profile_io import load_profile, save_profile

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Literal
+import re
+from typing import Literal, get_args
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +17,12 @@ from quantpilot.agent.risk_profile.questions import (
 from quantpilot.agent.risk_profile.sheet import AnswerSheet
 
 PersonaId = Literal["conservative", "balanced", "aggressive"]
+
+if set(get_args(PersonaId)) != set(PERSONA_IDS):
+    raise RuntimeError(
+        "PersonaId Literal is out of sync with PERSONA_IDS: "
+        f"{get_args(PersonaId)!r} vs {PERSONA_IDS!r}"
+    )
 
 _BUCKET_RANK: dict[str, int] = {
     "conservative": 0,
@@ -41,11 +48,12 @@ class RiskProfileResult(BaseModel):
     answers: list[dict[str, str]] = Field(default_factory=list)
     source: str = "questionnaire"
     citation: str = ""
+    profile_id: str | None = None
 
     def persona(self) -> TradingPersona:
         return get_persona(self.persona_id)
 
-    def summary_lines(self, lang: str = "en") -> list[str]:
+    def summary_lines(self, lang: str = "ko") -> list[str]:
         from quantpilot.agent.risk_profile.i18n import normalize_lang, ui_text
 
         loc = normalize_lang(lang)
@@ -158,11 +166,22 @@ def score_answer_sheet(
 
 def assert_no_self_label_prompts() -> None:
     """Guardrail: questionnaire must not ask users to self-label a persona."""
-    banned = ("aggressive", "conservative", "balanced", "risk tolerance level")
+    persona_words = ("aggressive", "conservative", "balanced")
+    self_label = re.compile(
+        r"\b(?:are you|i am|i'm|you are)\s+(?:an?\s+)?"
+        r"(?:aggressive|conservative|balanced)\b"
+    )
+    menu = re.compile(
+        r"conservative\s*/\s*balanced\s*/\s*aggressive|"
+        r"aggressive\s*/\s*balanced\s*/\s*conservative"
+    )
     for q in load_all_questions():
-        lower = q.prompt.lower()
-        if "are you an" in lower or "your risk profile" in lower:
+        blobs = [q.prompt.lower(), *(c.label.lower() for c in q.choices)]
+        joined = " | ".join(blobs)
+        if "your risk profile" in joined or "are you an" in joined:
             raise AssertionError(f"Self-label prompt forbidden: {q.id}")
-        for word in banned:
-            if lower.strip() in {f"i am {word}", f"are you {word}?"}:
+        if self_label.search(joined) or menu.search(joined):
+            raise AssertionError(f"Self-label prompt forbidden: {q.id}")
+        for word in persona_words:
+            if joined.strip() in {f"i am {word}", f"are you {word}?"}:
                 raise AssertionError(f"Self-label prompt forbidden: {q.id}")

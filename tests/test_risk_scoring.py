@@ -1,8 +1,10 @@
-"""Tests for Grable–Lytton + capacity scoring and profile I/O."""
+"""Tests for Grable-Lytton + capacity scoring and profile I/O."""
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from quantpilot.agent.risk_profile.profile_io import load_profile, save_profile
 from quantpilot.agent.risk_profile.questionnaire import collect_answer_sheet_from_maps
@@ -88,3 +90,24 @@ def test_profile_roundtrip(tmp_path: Path) -> None:
     loaded = load_profile(path)
     assert loaded.persona_id == result.persona_id
     assert loaded.willingness_score == result.willingness_score
+    assert loaded.profile_id == "p"
+
+
+def test_profile_id_rejects_traversal(tmp_path: Path) -> None:
+    sheet = collect_answer_sheet_from_maps(_all_choice_a())
+    result = score_answer_sheet(sheet)
+    with pytest.raises(ValueError, match="Invalid profile_id"):
+        save_profile(result, profile_id="../evil")
+    with pytest.raises(ValueError, match="Invalid profile_id"):
+        save_profile(result, profile_id="a/b")
+
+
+def test_parse_selected_choice_id() -> None:
+    from quantpilot.agent.risk_profile.interviewer import _parse_selected_choice_id
+    from quantpilot.agent.risk_profile.questions import load_capacity_questions
+
+    q = load_capacity_questions()[0]
+    assert _parse_selected_choice_id("a: anything", q) == "a"
+    assert _parse_selected_choice_id("b", q) == "b"
+    with pytest.raises(ValueError, match="Unknown selection"):
+        _parse_selected_choice_id("not-a-choice", q)

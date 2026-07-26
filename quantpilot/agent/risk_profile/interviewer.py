@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from pydantic import BaseModel, Field
@@ -10,6 +11,8 @@ from quantpilot.agent.risk_profile.i18n import Lang, localize_questions, ui_text
 from quantpilot.agent.risk_profile.questions import Question, load_all_questions
 from quantpilot.agent.risk_profile.sheet import AnswerSheet, ChoiceAnswer
 from quantpilot.ai.structured import extract_structured
+
+logger = logging.getLogger(__name__)
 
 LOW_CONFIDENCE = 0.55
 
@@ -26,6 +29,19 @@ class ExtractedChoice(BaseModel):
 def _choice_catalog(question: Question) -> str:
     lines = [f"- {c.id}: {c.label}" for c in question.choices]
     return "\n".join(lines)
+
+
+def _parse_selected_choice_id(selected: str, question: Question) -> str:
+    """Parse ask_select output; accept '<id>: <label>' or bare id."""
+    raw = str(selected).strip()
+    choice_id = raw.split(":", 1)[0].strip()
+    valid_ids = {c.id for c in question.choices}
+    if choice_id not in valid_ids:
+        raise ValueError(
+            f"Unknown selection {selected!r} for {question.id}; "
+            f"expected one of {sorted(valid_ids)}"
+        )
+    return choice_id
 
 
 def extract_choice_from_text(
@@ -74,7 +90,7 @@ def interview_collect_sheet(
     ask_select: Callable[[str, list[str]], str],
     model: str | None = None,
     on_status: Callable[[str], None] | None = None,
-    lang: Lang = "en",
+    lang: Lang = "ko",
     questions: list[Question] | None = None,
 ) -> AnswerSheet:
     """Walk all questions with LLM extraction; fall back to select on low confidence.
@@ -94,7 +110,15 @@ def interview_collect_sheet(
         free = ask_free_text(question.prompt)
         try:
             extracted = extract_choice_from_text(question, free, model=model)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Choice extraction failed for %s: %s",
+                question.id,
+                exc,
+                exc_info=True,
+            )
+            if on_status:
+                on_status(f"Extraction failed for {question.id}; please select.")
             extracted = ExtractedChoice(
                 question_id=question.id,
                 choice_id=question.choices[0].id,
@@ -111,7 +135,7 @@ def interview_collect_sheet(
                 f"{question.prompt}\n{ui_text('pick_one', lang)}",
                 labels,
             )
-            choice_id = str(selected).split(":", 1)[0].strip()
+            choice_id = _parse_selected_choice_id(selected, question)
             sheet = sheet.with_answer(
                 ChoiceAnswer(
                     question_id=question.id,

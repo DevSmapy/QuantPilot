@@ -1,1 +1,1 @@
-"""Packaged questionnaire JSON (Grable–Lytton + capacity)."""
+"""Packaged questionnaire JSON (Grable-Lytton + capacity)."""

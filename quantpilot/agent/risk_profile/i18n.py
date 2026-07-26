@@ -37,7 +37,7 @@ _UI_EN: dict[str, str] = {
     "streamlit_saved": "Saved {path}",
     "lang_label": "Language",
     "persona": "Persona: {persona}",
-    "willingness": ("Willingness (Grable–Lytton): score={score} → {bucket}"),
+    "willingness": ("Willingness (Grable-Lytton): score={score} → {bucket}"),
     "capacity": "Capacity: score={score} → {bucket}",
     "flag_exceeds": (
         "Note: attitude is more aggressive than capacity; "
@@ -47,9 +47,13 @@ _UI_EN: dict[str, str] = {
 
 
 def normalize_lang(lang: str | None) -> Lang:
-    """Return a supported language code; unknown values fall back to English."""
+    """Normalize a language code to a supported value.
+
+    ``None`` defaults to Korean. Supported aliases map to ``ko`` or ``en``.
+    Unsupported values raise ``ValueError``.
+    """
     if lang is None:
-        return "en"
+        return "ko"
     key = lang.strip().lower().replace("_", "-")
     if key in ("ko", "ko-kr", "korean", "kr"):
         return "ko"
@@ -68,7 +72,7 @@ def _load_ko_pack() -> dict[str, Any]:
     return data
 
 
-def ui_text(key: str, lang: Lang = "en", **kwargs: object) -> str:
+def ui_text(key: str, lang: Lang = "ko", **kwargs: object) -> str:
     """Return a UI chrome string for the locale."""
     if lang == "ko":
         pack = _load_ko_pack()
@@ -80,7 +84,7 @@ def ui_text(key: str, lang: Lang = "en", **kwargs: object) -> str:
     return template
 
 
-def localize_questions(questions: list[Question], lang: Lang = "en") -> list[Question]:
+def localize_questions(questions: list[Question], lang: Lang = "ko") -> list[Question]:
     """Overlay translated prompts/labels; keep ids/points/buckets unchanged."""
     if lang == "en":
         return list(questions)

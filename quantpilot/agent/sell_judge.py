@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Protocol
 
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 
 from quantpilot.agent.decision import TradeDecision
 from quantpilot.environment.observation import AgentObservation
+
+logger = logging.getLogger(__name__)
 
 _PLACEHOLDERS = frozenset(
     {
@@ -48,10 +51,10 @@ class SupportsGenerate(Protocol):
 def assess_sell_reason_heuristic(reason: str) -> bool:
     """Return True if the reason clears cheap placeholder checks."""
     text = reason.strip()
-    if len(text) < 12:
-        return False
     lowered = text.lower().strip(" .!?")
     if lowered in _PLACEHOLDERS:
+        return False
+    if len(text) < 12:
         return False
     words = re.findall(r"[a-zA-Z0-9]+", text)
     if len(words) <= 1:
@@ -96,15 +99,24 @@ def judge_sell_reason_with_generate(
     raw = llm.generate(prompt, format_json=True, options=options)
     try:
         return SellGroundingResult.model_validate_json(raw)
-    except Exception:
-        # Fallback: first JSON object via pydantic validation after scrape
+    except Exception as exc:
         start = raw.find("{")
         end = raw.rfind("}")
         if start < 0 or end <= start:
+            logger.warning(
+                "Unparseable sell-judge payload (no JSON object): %s",
+                exc,
+                exc_info=True,
+            )
             return SellGroundingResult(ok=False, critique="unparseable_judge_response")
         try:
             return SellGroundingResult.model_validate_json(raw[start : end + 1])
-        except Exception:
+        except Exception as scrape_exc:
+            logger.warning(
+                "Unparseable sell-judge payload after scrape: %s",
+                scrape_exc,
+                exc_info=True,
+            )
             return SellGroundingResult(ok=False, critique="unparseable_judge_response")
 
 
@@ -175,7 +187,8 @@ def gate_sell_decision(
             )
         else:
             return TradeDecision.hold(reason="sell_judge_unavailable")
-    except Exception:
+    except Exception as exc:
+        logger.warning("Sell judge unavailable: %s", exc, exc_info=True)
         return TradeDecision.hold(reason="sell_judge_unavailable")
 
     if not result.ok:

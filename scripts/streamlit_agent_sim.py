@@ -7,12 +7,12 @@ import csv
 import io
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Literal, cast
+from uuid import uuid4
 
 import plotly.graph_objects as go
 import streamlit as st
-
-from pathlib import Path
 
 from quantpilot.agent.base import TradingAgent
 from quantpilot.agent.decision import TradeDecision
@@ -756,9 +756,10 @@ def main() -> None:
             result = score_answer_sheet(sheet, source="streamlit")
             for line in result.summary_lines(q_lang):
                 st.write(line)
+            profile_id = f"streamlit-{date.today().isoformat()}-{uuid4().hex[:8]}"
             out = save_profile(
                 result,
-                profile_id=f"streamlit-{date.today().isoformat()}",
+                profile_id=profile_id,
             )
             st.success(ui_text("streamlit_saved", q_lang, path=out))
             st.session_state["last_profile_path"] = str(out)

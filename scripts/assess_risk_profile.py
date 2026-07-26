@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive risk-profile assessment (Grable–Lytton + capacity)."""
+"""Interactive risk-profile assessment (Grable-Lytton + capacity)."""
 
 from __future__ import annotations
 
@@ -72,31 +72,35 @@ def main() -> None:
     print(ui_text("intro", lang))
     print("=" * 60)
 
-    if args.llm:
+    try:
+        if args.llm:
 
-        def ask_free(prompt: str) -> str:
-            text = questionary.text(prompt).ask()
-            if text is None:
-                raise KeyboardInterrupt(ui_text("cancelled", lang))
-            return text
+            def ask_free(prompt: str) -> str:
+                text = questionary.text(prompt).ask()
+                if text is None:
+                    raise KeyboardInterrupt(ui_text("cancelled", lang))
+                return text
 
-        def ask_select(prompt: str, choices: list[str]) -> str:
-            selected = questionary.select(prompt, choices=choices).ask()
-            if selected is None:
-                raise KeyboardInterrupt(ui_text("cancelled", lang))
-            return selected
+            def ask_select(prompt: str, choices: list[str]) -> str:
+                selected = questionary.select(prompt, choices=choices).ask()
+                if selected is None:
+                    raise KeyboardInterrupt(ui_text("cancelled", lang))
+                return selected
 
-        sheet = interview_collect_sheet(
-            ask_free_text=ask_free,
-            ask_select=ask_select,
-            model=args.model,
-            on_status=print,
-            lang=lang,
-        )
-        source = "llm_interview"
-    else:
-        sheet = collect_answer_sheet_questionary(lang=lang)
-        source = "questionnaire"
+            sheet = interview_collect_sheet(
+                ask_free_text=ask_free,
+                ask_select=ask_select,
+                model=args.model,
+                on_status=print,
+                lang=lang,
+            )
+            source = "llm_interview"
+        else:
+            sheet = collect_answer_sheet_questionary(lang=lang)
+            source = "questionnaire"
+    except KeyboardInterrupt:
+        print(ui_text("cancelled", lang))
+        raise SystemExit(1) from None
 
     result = score_answer_sheet(sheet, source=source)
     for line in result.summary_lines(lang):
