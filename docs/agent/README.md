@@ -212,13 +212,17 @@ uv run pytest tests/test_agent_decision.py \
 - **Capacity**: 지평·유동성·우선순위 3문항 (FINRA digital-advice 축 근사)
 - 충돌 시 **더 보수인 쪽** 채택 (`willingness_exceeds_capacity` 플래그)
 - CLI UI는 **questionary**, LLM 인터뷰/구조화 추출은 **instructor** (성숙 PyPI risk-profiler 패키지는 없음)
+- 문항 표시 언어: `--lang ko|en` (기본 `ko`). 채점은 choice id 기준이라 언어와 무관. 영어는 G&L 원문, 한국어는 번역 오버레이
 
 ```bash
-# 고정 설문 → storage/profiles/*.json
+# 고정 설문 → storage/profiles/*.json (기본 UI 언어: 한국어)
 uv run python scripts/assess_risk_profile.py
 
+# 영어 문항(G&L 원문 표기)
+uv run python scripts/assess_risk_profile.py --lang en
+
 # 선택: Ollama 인터뷰어 (같은 AnswerSheet·채점기)
-uv run python scripts/assess_risk_profile.py --llm
+uv run python scripts/assess_risk_profile.py --llm --lang ko
 
 # 시뮬에 프로필 연결
 uv run python scripts/run_agent_sim.py \

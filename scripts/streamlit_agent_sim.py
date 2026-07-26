@@ -19,6 +19,11 @@ from quantpilot.agent.decision import TradeDecision
 from quantpilot.agent.hold import HoldAgent
 from quantpilot.agent.llm import LlmTradingAgent
 from quantpilot.agent.persona import get_persona
+from quantpilot.agent.risk_profile.i18n import (
+    localize_questions,
+    normalize_lang,
+    ui_text,
+)
 from quantpilot.agent.risk_profile.profile_io import load_profile, save_profile
 from quantpilot.agent.risk_profile.questionnaire import collect_answer_sheet_from_maps
 from quantpilot.agent.risk_profile.questions import load_all_questions
@@ -731,28 +736,31 @@ def main() -> None:
             index=0,
         )
         judge_sell = st.checkbox("Judge sell reasons (LLM grounding)", value=True)
+        q_lang_label = st.selectbox(
+            "Q&A language / 진단 언어",
+            ["ko", "en"],
+            index=0,
+        )
         run = st.button("Run simulation", type="primary")
 
-    with st.expander("Risk profile assessment (Q&A)", expanded=False):
-        st.caption(
-            "Willingness uses Grable & Lytton (1999). "
-            "No self-label questions (you are not asked if you are aggressive)."
-        )
+    q_lang = normalize_lang(q_lang_label)
+    with st.expander(ui_text("streamlit_expander", q_lang), expanded=False):
+        st.caption(ui_text("streamlit_caption", q_lang))
         answers: dict[str, str] = {}
-        for q in load_all_questions():
+        for q in localize_questions(load_all_questions(), q_lang):
             labels = [f"{c.id}: {c.label}" for c in q.choices]
-            picked = st.radio(q.prompt, labels, key=f"risk_{q.id}")
+            picked = st.radio(q.prompt, labels, key=f"risk_{q_lang}_{q.id}")
             answers[q.id] = picked.split(":", 1)[0].strip()
-        if st.button("Score & save profile"):
+        if st.button(ui_text("streamlit_score_btn", q_lang)):
             sheet = collect_answer_sheet_from_maps(answers)
             result = score_answer_sheet(sheet, source="streamlit")
-            for line in result.summary_lines():
+            for line in result.summary_lines(q_lang):
                 st.write(line)
             out = save_profile(
                 result,
                 profile_id=f"streamlit-{date.today().isoformat()}",
             )
-            st.success(f"Saved {out}")
+            st.success(ui_text("streamlit_saved", q_lang, path=out))
             st.session_state["last_profile_path"] = str(out)
 
     if run:

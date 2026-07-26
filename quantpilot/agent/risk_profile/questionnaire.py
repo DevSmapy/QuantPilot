@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 import questionary
 
+from quantpilot.agent.risk_profile.i18n import Lang, localize_questions, ui_text
 from quantpilot.agent.risk_profile.questions import Question, load_all_questions
 from quantpilot.agent.risk_profile.sheet import AnswerSheet, ChoiceAnswer
 
@@ -13,9 +14,14 @@ from quantpilot.agent.risk_profile.sheet import AnswerSheet, ChoiceAnswer
 def collect_answer_sheet_questionary(
     *,
     questions: list[Question] | None = None,
+    lang: Lang = "en",
 ) -> AnswerSheet:
     """Run the full fixed questionnaire via questionary select prompts."""
-    items = questions if questions is not None else load_all_questions()
+    items = (
+        questions
+        if questions is not None
+        else localize_questions(load_all_questions(), lang)
+    )
     sheet = AnswerSheet()
     for item in items:
         choice_map = {f"{c.id}: {c.label}": c.id for c in item.choices}
@@ -24,7 +30,7 @@ def collect_answer_sheet_questionary(
             choices=list(choice_map.keys()),
         ).ask()
         if selected is None:
-            raise KeyboardInterrupt("Questionnaire cancelled")
+            raise KeyboardInterrupt(ui_text("cancelled", lang))
         sheet = sheet.with_answer(
             ChoiceAnswer(question_id=item.id, choice_id=choice_map[selected])
         )
@@ -54,15 +60,14 @@ def collect_answer_sheet_from_maps(
 def confirm_profile(
     summary_lines: list[str],
     ask_confirm: Callable[[str], bool] | None = None,
+    *,
+    lang: Lang = "en",
 ) -> bool:
     """Ask the user to confirm applying the derived policy."""
-    text = "Derived policy:\n" + "\n".join(f"  {line}" for line in summary_lines)
+    title = ui_text("confirm_title", lang)
+    text = f"{title}\n" + "\n".join(f"  {line}" for line in summary_lines)
     print(text)
+    prompt = ui_text("confirm", lang)
     if ask_confirm is not None:
-        return ask_confirm("Use this policy for simulations?")
-    return bool(
-        questionary.confirm(
-            "Use this policy for simulations?",
-            default=True,
-        ).ask()
-    )
+        return ask_confirm(prompt)
+    return bool(questionary.confirm(prompt, default=True).ask())

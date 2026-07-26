@@ -45,18 +45,27 @@ class RiskProfileResult(BaseModel):
     def persona(self) -> TradingPersona:
         return get_persona(self.persona_id)
 
-    def summary_lines(self) -> list[str]:
+    def summary_lines(self, lang: str = "en") -> list[str]:
+        from quantpilot.agent.risk_profile.i18n import normalize_lang, ui_text
+
+        loc = normalize_lang(lang)
         lines = [
-            f"Persona: {self.persona_id}",
-            f"Willingness (Grable–Lytton): score={self.willingness_score} "
-            f"→ {self.willingness_bucket}",
-            f"Capacity: score={self.capacity_score} → {self.capacity_bucket}",
+            ui_text("persona", loc, persona=self.persona_id),
+            ui_text(
+                "willingness",
+                loc,
+                score=self.willingness_score,
+                bucket=self.willingness_bucket,
+            ),
+            ui_text(
+                "capacity",
+                loc,
+                score=self.capacity_score,
+                bucket=self.capacity_bucket,
+            ),
         ]
         if "willingness_exceeds_capacity" in self.flags:
-            lines.append(
-                "Note: attitude is more aggressive than capacity; "
-                "the more conservative policy is applied."
-            )
+            lines.append(ui_text("flag_exceeds", loc))
         return lines
 
 

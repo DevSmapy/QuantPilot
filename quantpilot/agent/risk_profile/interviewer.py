@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from pydantic import BaseModel, Field
 
+from quantpilot.agent.risk_profile.i18n import Lang, localize_questions, ui_text
 from quantpilot.agent.risk_profile.questions import Question, load_all_questions
 from quantpilot.agent.risk_profile.sheet import AnswerSheet, ChoiceAnswer
 from quantpilot.ai.structured import extract_structured
@@ -73,6 +74,8 @@ def interview_collect_sheet(
     ask_select: Callable[[str, list[str]], str],
     model: str | None = None,
     on_status: Callable[[str], None] | None = None,
+    lang: Lang = "en",
+    questions: list[Question] | None = None,
 ) -> AnswerSheet:
     """Walk all questions with LLM extraction; fall back to select on low confidence.
 
@@ -80,10 +83,14 @@ def interview_collect_sheet(
     are injected so CLI (questionary) and tests can share this flow.
     """
     sheet = AnswerSheet()
-    questions = load_all_questions()
-    for question in questions:
+    items = (
+        questions
+        if questions is not None
+        else localize_questions(load_all_questions(), lang)
+    )
+    for question in items:
         if on_status:
-            on_status(f"Asking {question.id}…")
+            on_status(ui_text("asking", lang, qid=question.id))
         free = ask_free_text(question.prompt)
         try:
             extracted = extract_choice_from_text(question, free, model=model)
@@ -101,7 +108,7 @@ def interview_collect_sheet(
         ):
             labels = [f"{c.id}: {c.label}" for c in question.choices]
             selected = ask_select(
-                f"{question.prompt}\n(Please pick one)",
+                f"{question.prompt}\n{ui_text('pick_one', lang)}",
                 labels,
             )
             choice_id = str(selected).split(":", 1)[0].strip()
